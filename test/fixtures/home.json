@@ -1,0 +1,254 @@
+{
+  "version": 1,
+  "rev": 3,
+  "plan": {
+    "id": "test-home",
+    "name": "Test Home",
+    "floors": [
+      {
+        "id": "f1",
+        "name": "Ground floor",
+        "level": 0,
+        "walls": [
+          {
+            "id": "w1",
+            "start": {
+              "x": -260,
+              "y": -210
+            },
+            "end": {
+              "x": 260,
+              "y": -210
+            },
+            "thickness": 15,
+            "height": 280,
+            "color": "#444444"
+          },
+          {
+            "id": "w2",
+            "start": {
+              "x": 260,
+              "y": -210
+            },
+            "end": {
+              "x": 260,
+              "y": 210
+            },
+            "thickness": 15,
+            "height": 280,
+            "color": "#444444"
+          },
+          {
+            "id": "w3",
+            "start": {
+              "x": 260,
+              "y": 210
+            },
+            "end": {
+              "x": -260,
+              "y": 210
+            },
+            "thickness": 15,
+            "height": 280,
+            "color": "#444444"
+          },
+          {
+            "id": "w4",
+            "start": {
+              "x": -260,
+              "y": 210
+            },
+            "end": {
+              "x": -260,
+              "y": -210
+            },
+            "thickness": 15,
+            "height": 280,
+            "color": "#444444"
+          },
+          {
+            "id": "w5",
+            "start": {
+              "x": 260,
+              "y": -120
+            },
+            "end": {
+              "x": 460,
+              "y": -120
+            },
+            "thickness": 15,
+            "height": 280,
+            "color": "#444444"
+          },
+          {
+            "id": "w6",
+            "start": {
+              "x": 460,
+              "y": -120
+            },
+            "end": {
+              "x": 460,
+              "y": 120
+            },
+            "thickness": 15,
+            "height": 280,
+            "color": "#444444"
+          },
+          {
+            "id": "w7",
+            "start": {
+              "x": 460,
+              "y": 120
+            },
+            "end": {
+              "x": 260,
+              "y": 120
+            },
+            "thickness": 15,
+            "height": 280,
+            "color": "#444444"
+          },
+          {
+            "id": "w8",
+            "start": {
+              "x": -100,
+              "y": 210
+            },
+            "end": {
+              "x": -100,
+              "y": 390
+            },
+            "thickness": 15,
+            "height": 280,
+            "color": "#444444"
+          },
+          {
+            "id": "w9",
+            "start": {
+              "x": -100,
+              "y": 390
+            },
+            "end": {
+              "x": 100,
+              "y": 390
+            },
+            "thickness": 15,
+            "height": 280,
+            "color": "#444444"
+          },
+          {
+            "id": "w10",
+            "start": {
+              "x": 100,
+              "y": 390
+            },
+            "end": {
+              "x": 100,
+              "y": 210
+            },
+            "thickness": 15,
+            "height": 280,
+            "color": "#444444"
+          }
+        ],
+        "doors": [
+          {
+            "id": "d1",
+            "wallId": "w2",
+            "position": 0.5,
+            "width": 80,
+            "height": 205
+          },
+          {
+            "id": "d2",
+            "wallId": "w3",
+            "position": 0.5,
+            "width": 80,
+            "height": 205
+          }
+        ],
+        "windows": [],
+        "rooms": [
+          {
+            "id": "room1",
+            "name": "Living Space",
+            "walls": ["w1", "w2", "w3", "w4"]
+          },
+          {
+            "id": "room2",
+            "name": "Bathroom",
+            "walls": ["w2", "w5", "w6", "w7"]
+          },
+          {
+            "id": "room3",
+            "name": "Hall",
+            "walls": ["w3", "w8", "w9", "w10"]
+          }
+        ],
+        "stairs": []
+      }
+    ]
+  },
+  "rooms": {
+    "room1": {
+      "slug": "living-space",
+      "label": "Living Space",
+      "floorColor": "#c9b391"
+    },
+    "room2": {
+      "slug": "bathroom",
+      "label": "Bathroom",
+      "floorColor": "#a5c8a2"
+    },
+    "room3": {
+      "slug": "hall",
+      "label": "Hall",
+      "floorColor": "#7fa8c9"
+    }
+  },
+  "overrides": {
+    "walls": {},
+    "doors": {},
+    "windows": {},
+    "deletedWalls": []
+  },
+  "additions": {
+    "props": [],
+    "lights": [
+      {
+        "slug": "living-space-light",
+        "room": "living-space",
+        "style": "flush",
+        "color": "#ffd4ab",
+        "on": true
+      },
+      {
+        "slug": "bathroom-light",
+        "room": "bathroom",
+        "style": "flush",
+        "color": "#ffd4ab",
+        "on": true
+      },
+      {
+        "slug": "hall-light",
+        "room": "hall",
+        "style": "flush",
+        "color": "#ffd4ab",
+        "on": true
+      }
+    ],
+    "pets": [],
+    "cables": [],
+    "cableEndpoints": [],
+    "groundZones": [],
+    "paths": [],
+    "gardenSteps": [],
+    "balconies": [],
+    "traces": {}
+  },
+  "meta": {
+    "label": "Test Home",
+    "kind": "drawn",
+    "updatedAt": "2026-08-08T00:00:00.000Z"
+  }
+}

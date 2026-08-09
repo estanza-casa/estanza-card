@@ -1,0 +1,10 @@
+{
+  "domain": "estanza_dev",
+  "name": "Estanza card dev harness",
+  "version": "1.0.0",
+  "documentation": "https://github.com/estanza-casa/estanza-card",
+  "codeowners": [],
+  "dependencies": [],
+  "requirements": [],
+  "iot_class": "local_push"
+}

@@ -1,0 +1,24 @@
+homeassistant:
+  name: Casa Aurora
+  unit_system: metric
+  time_zone: Europe/Madrid
+  country: ES
+  currency: EUR
+  latitude: 40.4168
+  longitude: -3.7038
+  elevation: 650
+  packages: !include_dir_named packages
+
+api:
+config:
+frontend:
+history:
+logbook:
+lovelace:
+onboarding:
+person:
+system_health:
+estanza_dev:
+
+logger:
+  default: warning

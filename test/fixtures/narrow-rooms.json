@@ -1,0 +1,403 @@
+{
+  "version": 1,
+  "rev": 1,
+  "plan": {
+    "id": "narrow-rooms",
+    "name": "Narrow rooms",
+    "floors": [
+      {
+        "id": "f1",
+        "name": "Ground floor",
+        "level": 0,
+        "walls": [
+          {
+            "id": "top",
+            "start": {
+              "x": -500,
+              "y": -200
+            },
+            "end": {
+              "x": 460,
+              "y": -200
+            },
+            "thickness": 15,
+            "height": 260,
+            "color": "#444444"
+          },
+          {
+            "id": "right",
+            "start": {
+              "x": 460,
+              "y": -200
+            },
+            "end": {
+              "x": 460,
+              "y": 200
+            },
+            "thickness": 15,
+            "height": 260,
+            "color": "#444444"
+          },
+          {
+            "id": "bottom",
+            "start": {
+              "x": 460,
+              "y": 200
+            },
+            "end": {
+              "x": -500,
+              "y": 200
+            },
+            "thickness": 15,
+            "height": 260,
+            "color": "#444444"
+          },
+          {
+            "id": "left",
+            "start": {
+              "x": -500,
+              "y": 200
+            },
+            "end": {
+              "x": -500,
+              "y": -200
+            },
+            "thickness": 15,
+            "height": 260,
+            "color": "#444444"
+          },
+          {
+            "id": "robe",
+            "start": {
+              "x": -400,
+              "y": -200
+            },
+            "end": {
+              "x": -400,
+              "y": 200
+            },
+            "thickness": 10,
+            "height": 260,
+            "color": "#444444"
+          },
+          {
+            "id": "suite",
+            "start": {
+              "x": 0,
+              "y": -200
+            },
+            "end": {
+              "x": 0,
+              "y": 200
+            },
+            "thickness": 10,
+            "height": 260,
+            "color": "#444444"
+          },
+          {
+            "id": "baths",
+            "start": {
+              "x": 120,
+              "y": -200
+            },
+            "end": {
+              "x": 120,
+              "y": 40
+            },
+            "thickness": 10,
+            "height": 260,
+            "color": "#444444"
+          },
+          {
+            "id": "office",
+            "start": {
+              "x": 240,
+              "y": -200
+            },
+            "end": {
+              "x": 240,
+              "y": 40
+            },
+            "thickness": 10,
+            "height": 260,
+            "color": "#444444"
+          },
+          {
+            "id": "living",
+            "start": {
+              "x": 0,
+              "y": 40
+            },
+            "end": {
+              "x": 460,
+              "y": 40
+            },
+            "thickness": 10,
+            "height": 260,
+            "color": "#444444"
+          }
+        ],
+        "doors": [
+          {
+            "id": "d1",
+            "wallId": "bottom",
+            "position": 0.25,
+            "width": 90,
+            "height": 205
+          },
+          {
+            "id": "d2",
+            "wallId": "robe",
+            "position": 0.8,
+            "width": 70,
+            "height": 205
+          },
+          {
+            "id": "d3",
+            "wallId": "suite",
+            "position": 0.8,
+            "width": 80,
+            "height": 205
+          },
+          {
+            "id": "d4",
+            "wallId": "living",
+            "position": 0.8,
+            "width": 80,
+            "height": 205
+          }
+        ],
+        "windows": [],
+        "rooms": [
+          {
+            "id": "r1",
+            "name": "Wardrobe (Suite)",
+            "walls": ["top", "robe", "bottom", "left"]
+          },
+          {
+            "id": "r2",
+            "name": "Suite",
+            "walls": ["top", "suite", "bottom", "robe"]
+          },
+          {
+            "id": "r3",
+            "name": "Guest Bathroom",
+            "walls": ["top", "baths", "living", "suite"]
+          },
+          {
+            "id": "r4",
+            "name": "Suite Bathroom",
+            "walls": ["top", "office", "living", "baths"]
+          },
+          {
+            "id": "r5",
+            "name": "Office",
+            "walls": ["top", "right", "living", "office"]
+          },
+          {
+            "id": "r6",
+            "name": "Living Room",
+            "walls": ["living", "right", "bottom", "suite"]
+          }
+        ],
+        "stairs": []
+      },
+      {
+        "id": "f2",
+        "name": "First floor",
+        "level": 1,
+        "walls": [
+          {
+            "id": "u-top",
+            "start": {
+              "x": -500,
+              "y": -200
+            },
+            "end": {
+              "x": 460,
+              "y": -200
+            },
+            "thickness": 15,
+            "height": 260,
+            "color": "#444444"
+          },
+          {
+            "id": "u-right",
+            "start": {
+              "x": 460,
+              "y": -200
+            },
+            "end": {
+              "x": 460,
+              "y": 200
+            },
+            "thickness": 15,
+            "height": 260,
+            "color": "#444444"
+          },
+          {
+            "id": "u-bottom",
+            "start": {
+              "x": 460,
+              "y": 200
+            },
+            "end": {
+              "x": -500,
+              "y": 200
+            },
+            "thickness": 15,
+            "height": 260,
+            "color": "#444444"
+          },
+          {
+            "id": "u-left",
+            "start": {
+              "x": -500,
+              "y": 200
+            },
+            "end": {
+              "x": -500,
+              "y": -200
+            },
+            "thickness": 15,
+            "height": 260,
+            "color": "#444444"
+          },
+          {
+            "id": "u-mid",
+            "start": {
+              "x": 0,
+              "y": -200
+            },
+            "end": {
+              "x": 0,
+              "y": 200
+            },
+            "thickness": 10,
+            "height": 260,
+            "color": "#444444"
+          }
+        ],
+        "doors": [
+          {
+            "id": "d5",
+            "wallId": "u-mid",
+            "position": 0.5,
+            "width": 80,
+            "height": 205
+          }
+        ],
+        "windows": [],
+        "rooms": [
+          {
+            "id": "r7",
+            "name": "Loft",
+            "walls": ["u-top", "u-mid", "u-bottom", "u-left"]
+          },
+          {
+            "id": "r8",
+            "name": "Studio",
+            "walls": ["u-top", "u-right", "u-bottom", "u-mid"]
+          }
+        ],
+        "stairs": []
+      }
+    ]
+  },
+  "rooms": {
+    "r1": {
+      "slug": "wardrobe-suite",
+      "label": "Wardrobe (Suite)",
+      "floorColor": "#c9b391"
+    },
+    "r2": {
+      "slug": "suite",
+      "label": "Suite",
+      "floorColor": "#d8c4a4"
+    },
+    "r3": {
+      "slug": "guest-bathroom",
+      "label": "Guest Bathroom",
+      "floorColor": "#a5c8a2"
+    },
+    "r4": {
+      "slug": "suite-bathroom",
+      "label": "Suite Bathroom",
+      "floorColor": "#a5c8a2"
+    },
+    "r5": {
+      "slug": "office",
+      "label": "Office",
+      "floorColor": "#7fa8c9"
+    },
+    "r6": {
+      "slug": "living-room",
+      "label": "Living Room",
+      "floorColor": "#c9b391"
+    },
+    "r7": {
+      "slug": "loft",
+      "label": "Loft",
+      "floorColor": "#d8c4a4"
+    },
+    "r8": {
+      "slug": "studio",
+      "label": "Studio",
+      "floorColor": "#7fa8c9"
+    }
+  },
+  "overrides": {
+    "walls": {},
+    "doors": {},
+    "windows": {},
+    "deletedWalls": []
+  },
+  "additions": {
+    "props": [
+      {
+        "slug": "office-desk",
+        "type": "catalog",
+        "catalogId": "desk",
+        "room": "office",
+        "at": [350, -80],
+        "rotation": 0
+      }
+    ],
+    "lights": [
+      {
+        "slug": "guest-bathroom-light",
+        "room": "guest-bathroom",
+        "style": "flush",
+        "color": "#ffd4ab",
+        "on": false
+      },
+      {
+        "slug": "suite-bathroom-light",
+        "room": "suite-bathroom",
+        "style": "flush",
+        "color": "#ffd4ab",
+        "on": false
+      },
+      {
+        "slug": "living-room-light",
+        "room": "living-room",
+        "style": "flush",
+        "color": "#ffd4ab",
+        "on": false
+      }
+    ],
+    "pets": [],
+    "cables": [],
+    "cableEndpoints": [],
+    "groundZones": [],
+    "paths": [],
+    "gardenSteps": [],
+    "balconies": [],
+    "traces": {}
+  },
+  "meta": {
+    "label": "Narrow rooms",
+    "kind": "drawn",
+    "updatedAt": "2026-09-29T00:00:00.000Z"
+  }
+}
