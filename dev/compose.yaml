@@ -1,0 +1,11 @@
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:2026.9.3
+    container_name: ${ESTANZA_HA_CONTAINER:?run through dev/ha.mjs}
+    restart: 'no'
+    ports:
+      - 127.0.0.1:${ESTANZA_HA_PORT:?run through dev/ha.mjs}:8123
+    volumes:
+      - ./ha-config:/config
+    environment:
+      TZ: Europe/Madrid

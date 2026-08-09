@@ -1,0 +1,29 @@
+input_boolean:
+  porch_motion:
+    name: Porch motion
+
+template:
+  - binary_sensor:
+      - name: Porch motion
+        unique_id: estanza_dev_extra_porch_motion
+        default_entity_id: binary_sensor.porch_motion
+        device_class: motion
+        state: "{{ is_state('input_boolean.porch_motion', 'on') }}"
+      - name: Aqara Door Window Sensor - Workshop
+        unique_id: estanza_dev_extra_aqara_workshop
+        default_entity_id: binary_sensor.aqara_contact_2
+        device_class: door
+        state: 'off'
+  - sensor:
+      - name: Sonoff Temperature and Humidity Sensor - Guest Room Temperature
+        unique_id: estanza_dev_extra_sonoff_guest_temperature
+        default_entity_id: sensor.th_2_temperature
+        device_class: temperature
+        unit_of_measurement: '°C'
+        state: '19.6'
+      - name: Sonoff Temperature and Humidity Sensor - Guest Room Humidity
+        unique_id: estanza_dev_extra_sonoff_guest_humidity
+        default_entity_id: sensor.th_2_humidity
+        device_class: humidity
+        unit_of_measurement: '%'
+        state: '54'

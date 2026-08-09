@@ -1,0 +1,6 @@
+{
+  "name": "Estanza 3D Floorplan Card",
+  "render_readme": true,
+  "filename": "estanza-card.js",
+  "homeassistant": "2026.6.0"
+}

@@ -1,0 +1,63 @@
+{
+  "name": "estanza-card",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@11.20.0",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "build": "vite build",
+    "check": "pnpm run lint:check && pnpm run format:check && pnpm run typecheck && pnpm run test && pnpm run build",
+    "dev": "vite build --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint:check": "eslint . --max-warnings 0",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "release": "node scripts/release.ts",
+    "ha:up": "node dev/ha.mjs up",
+    "ha:card": "vite --config dev/vite.config.ts",
+    "ha:down": "node dev/ha.mjs down",
+    "ha:scenario": "node dev/scenario.mjs",
+    "ha:share": "node dev/share.mjs"
+  },
+  "dependencies": {
+    "@estanza/plan-engine": "link:../estanza/packages/plan-engine",
+    "@estanza/plan2d": "link:../estanza/packages/plan2d",
+    "@estanza/scene": "link:../estanza/packages/scene",
+    "@estanza/shared": "link:../estanza/packages/shared",
+    "@estanza/tokens": "link:../estanza/packages/tokens",
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.7.0",
+    "lit": "^3.3.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/three": "0.185.4",
+    "@typescript-eslint/eslint-plugin": "^8.67.0",
+    "@typescript-eslint/parser": "^8.67.0",
+    "eslint": "^10.8.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.6",
+    "eslint-plugin-simple-import-sort": "^14.0.0",
+    "eslint-plugin-unused-imports": "^4.4.1",
+    "globals": "^17.11.0",
+    "jsdom": "^30.0.1",
+    "playwright-core": "1.62.1",
+    "prettier": "^3.9.6",
+    "typescript": "^6.0.3",
+    "vite": "^8.2.1",
+    "vitest": "^4.1.10"
+  }
+}
