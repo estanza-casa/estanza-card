@@ -54,6 +54,14 @@ export const switchStyles = css`
     max-height: calc(100% - 24px - var(--ez-sheet-rise, 0px));
   }
 
+  .stage.undrawn .dock {
+    visibility: hidden;
+  }
+
+  .stage:not(.undrawn) .dock {
+    animation: ez-appear ${unsafeCSS(tokens.motion.micro)} 1;
+  }
+
   .views {
     flex: none;
     display: flex;
@@ -172,7 +180,8 @@ export const switchStyles = css`
     estanza-plan-view,
     estanza-plan-view.leaving,
     .stage.on-plan :is(.marks, .temps, .pins),
-    .stage.plan-leaving :is(.marks, .temps) {
+    .stage.plan-leaving :is(.marks, .temps),
+    .stage:not(.undrawn) .dock {
       animation: none;
     }
 

@@ -1974,6 +1974,20 @@ describe('document loading', () => {
     expect(view.sharedHome?.name).toBe('Test Home');
   });
 
+  it('shows no words while the home is on its way', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(() => new Promise(() => undefined)),
+    );
+
+    const view = await mountView((element) => {
+      element.shareId = 'abc123';
+    });
+
+    expect(view.sceneStatus).toBe('loading');
+    expect(view.shadowRoot?.querySelector('.notice')).toBeNull();
+  });
+
   it('honours a custom api origin', async () => {
     const fetchMock = vi.fn().mockImplementation(servedHome());
 
