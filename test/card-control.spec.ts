@@ -914,7 +914,9 @@ describe('a bottom sheet on a phone', () => {
     await act(card, 'room:kitchen');
 
     expect(find(card, '.stage')?.classList).toContain('sheet-up');
-    expect(styleRules()).not.toMatch(/\.dock \{[^}]*visibility: hidden;/);
+    expect(styleRules()).not.toMatch(
+      /(?<!\.undrawn )\.dock \{[^}]*visibility: hidden;/,
+    );
     expect(styleRules()).toMatch(
       /\.stage\.sheet-up \.dock \{[^}]*max-height: calc\(100% - 24px - var\(--ez-sheet-rise, 0px\)\);/,
     );

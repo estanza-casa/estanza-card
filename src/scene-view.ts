@@ -2093,7 +2093,6 @@ export class EstanzaSceneView extends LitElement {
 
   private get notice(): string {
     if (this.rendererNotice) return this.rendererNotice;
-    if (this.status === 'loading') return 'Loading home';
     if (this.status === 'outdated') return OUTDATED_WORDS;
     if (this.status === 'missing') {
       return 'Could not read this link. Copy the share link again in Estanza';

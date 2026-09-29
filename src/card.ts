@@ -886,6 +886,8 @@ export class EstanzaCard extends LitElement {
 
   @state() private view: View = '3d';
 
+  @state() private homeDrawn = false;
+
   @state() private planLeaving = false;
 
   @state() private planHeld = false;
@@ -1529,6 +1531,7 @@ export class EstanzaCard extends LitElement {
             this.bottomSheet || this.bottomChooser ? 'sheet-up' : '',
             this.sheetCovers ? 'covered' : '',
             this.pillsMoving ? 'pills-moving' : '',
+            this.homeDrawn ? '' : 'undrawn',
           ]
             .filter(Boolean)
             .join(' ')}
@@ -2122,6 +2125,7 @@ export class EstanzaCard extends LitElement {
       this.tablet && this.orientation === 'portrait',
     );
     this.syncAlerts();
+    this.noteHomeDrawn();
 
     if (!changed.has('hass')) return;
     if (this.house) this.house.hass = this.hass;
@@ -4613,7 +4617,19 @@ export class EstanzaCard extends LitElement {
     this.planMoving = (event as CustomEvent<boolean>).detail;
   };
 
+  private noteHomeDrawn(): void {
+    if (this.homeDrawn || !this.homeFloors) return;
+
+    const scene = this.sceneView;
+    const undrawn =
+      this.view === '3d' && scene?.drawable === true && scene.frames === 0;
+
+    if (!undrawn) this.homeDrawn = true;
+  }
+
   private onViewChange = (): void => {
+    this.noteHomeDrawn();
+
     if (this.view === '2d') {
       const plan =
         this.renderRoot.querySelector<EstanzaPlanView>('estanza-plan-view');
