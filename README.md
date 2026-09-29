@@ -24,7 +24,7 @@ The card installs through HACS as a custom repository. It ships as one file, `es
 
 ### HACS, one click
 
-[Open this repository in HACS on your Home Assistant](https://my.home-assistant.io/redirect/hacs_repository/?owner=estanza-casa&repository=estanza-card&category=dashboard). Confirm your Home Assistant address when asked, then press **Download**.
+[Open this repository in HACS on your Home Assistant](https://my.home-assistant.io/redirect/hacs_repository/?owner=estanza-casa&repository=estanza-card&category=plugin). Confirm your Home Assistant address when asked, then press **Download**.
 
 ### HACS, by hand
 
