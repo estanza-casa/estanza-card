@@ -6,9 +6,9 @@ Turn on the kitchen light and the kitchen in the model lights up, in the colour 
 
 | 3D, light theme                                                   | 3D, dark theme                                                  |
 | ----------------------------------------------------------------- | --------------------------------------------------------------- |
-| ![The 3D card in a light theme](docs/images/card-3d-light.png)    | ![The 3D card in a dark theme](docs/images/card-3d-dark.png)    |
+| ![The 3D card in a light theme](https://raw.githubusercontent.com/estanza-casa/estanza-card/main/docs/images/card-3d-light.png)    | ![The 3D card in a dark theme](https://raw.githubusercontent.com/estanza-casa/estanza-card/main/docs/images/card-3d-dark.png)    |
 | **Floor plan, light theme**                                       | **Floor plan, dark theme**                                      |
-| ![The floor plan in a light theme](docs/images/card-2d-light.png) | ![The floor plan in a dark theme](docs/images/card-2d-dark.png) |
+| ![The floor plan in a light theme](https://raw.githubusercontent.com/estanza-casa/estanza-card/main/docs/images/card-2d-light.png) | ![The floor plan in a dark theme](https://raw.githubusercontent.com/estanza-casa/estanza-card/main/docs/images/card-2d-dark.png) |
 
 The screenshots show Casa Aurora, the Estanza demo home.
 
