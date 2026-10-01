@@ -175,6 +175,57 @@ describe('laying marks out on screen', () => {
     expect(kept.sort()).toEqual(packed.map((mark) => mark.key).sort());
   });
 
+  it('never folds the marks of two rooms into one bubble', () => {
+    const packed = Array.from({ length: 10 }, (_, index) =>
+      request(`light:${index}`, 60 + (index % 3) * 4, 60, {
+        room: index % 2 === 0 ? 'kitchen' : 'hall',
+      }),
+    );
+    const layout = layoutMarks(packed, [], { width: 120, height: 120 });
+    const roomOf = new Map(packed.map((mark) => [mark.key, mark.room]));
+
+    expect(layout.bubbles.length).toBeGreaterThan(0);
+
+    for (const bubble of layout.bubbles) {
+      const rooms = new Set(bubble.members.map((key) => roomOf.get(key)));
+
+      expect([...rooms], bubble.key).toEqual([bubble.room]);
+    }
+  });
+
+  it('hides a passive mark that cannot move clear rather than fold it', () => {
+    const packed = Array.from({ length: 9 }, (_, index) =>
+      request(`light:${index}`, 60, 60),
+    );
+    const layout = layoutMarks(
+      [...packed, request('window:w1', 60, 60, { passive: true })],
+      [],
+      { width: 120, height: 120 },
+    );
+
+    expect(layout.bubbles.length).toBeGreaterThan(0);
+    expect(layout.bubbles.flatMap((bubble) => bubble.members)).not.toContain(
+      'window:w1',
+    );
+    expect(layout.hidden).toEqual(['window:w1']);
+  });
+
+  it('lays every control out before a passive mark, whatever its order', () => {
+    const layout = layoutMarks(
+      [
+        request('door:d1', 100, 100, { passive: true }),
+        request('light:a', 104, 100),
+      ],
+      [],
+      AREA,
+    );
+
+    expect(layout.marks.find((mark) => mark.key === 'light:a')).toMatchObject({
+      x: 104,
+      y: 100,
+    });
+  });
+
   it('keeps a moved mark inside the home it marks', () => {
     const home = { x0: 60, y0: 60, x1: 120, y1: 160 };
     const layout = layoutMarks(

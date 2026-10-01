@@ -39,10 +39,10 @@ const DISC_PX = Number(
 
 const lamps = Array.from({ length: LAMPS }, (_, index) => `lamp-${index}`);
 
-function crowdedHome() {
-  const home = structuredClone(homeFixture);
+function crowdedHome(windows: readonly string[]) {
+  const draft = structuredClone(homeFixture);
 
-  home.additions.lights.push(
+  draft.additions.lights.push(
     ...lamps.map((slug) => ({
       slug,
       room: 'living-space',
@@ -52,7 +52,18 @@ function crowdedHome() {
     })),
   );
 
-  return homeDocumentSchema.parse(home);
+  Object.assign(draft.plan.floors[0], {
+    windows: windows.map((id, index) => ({
+      id,
+      wallId: index % 2 === 0 ? 'w1' : 'w4',
+      position: 0.1 + (Math.floor(index / 2) % 9) * 0.1,
+      width: 20,
+      height: 120,
+      sillHeight: 90,
+    })),
+  });
+
+  return homeDocumentSchema.parse(draft);
 }
 
 const bindings: SceneBinding[] = [
@@ -78,6 +89,8 @@ type MountOptions = {
   d2Position?: number;
   room?: boolean;
   plug?: boolean;
+  neighbours?: boolean;
+  windows?: number;
 };
 
 const plugBinding: SceneBinding = {
@@ -85,10 +98,29 @@ const plugBinding: SceneBinding = {
   entity_id: 'switch.tv_plug',
 };
 
+const neighbours = ['bathroom-light', 'hall-light'];
+
+const neighbourBindings: SceneBinding[] = neighbours.map((slug) => ({
+  scope: { type: 'light', id: slug },
+  entity_id: `light.${slug.replace('-', '_')}`,
+}));
+
+function windowIds(count: number): string[] {
+  return Array.from({ length: count }, (_, index) => `n${index + 1}`);
+}
+
+function windowBindings(count: number): SceneBinding[] {
+  return windowIds(count).map((id) => ({
+    scope: { type: 'window', id },
+    entity_id: `binary_sensor.window_${id}`,
+  }));
+}
+
 let hass: MockHass;
 
 async function mountCard(options: MountOptions = {}): Promise<EstanzaCard> {
   const card = document.createElement('estanza-card');
+  const windows = options.windows ?? 0;
 
   hass = createMockHass({
     states: [
@@ -104,16 +136,24 @@ async function mountCard(options: MountOptions = {}): Promise<EstanzaCard> {
         mockLight(`light.${slug.replace('-', '_')}`, { on: false }),
       ),
       mockSwitch('switch.tv_plug', true),
+      ...neighbours.map((slug) =>
+        mockLight(`light.${slug.replace('-', '_')}`, { on: false }),
+      ),
+      ...windowIds(windows).map((id) =>
+        mockBinarySensor(`binary_sensor.window_${id}`, 'window', true),
+      ),
     ],
   });
   card.hass = hass;
   card.setConfig({
     type: cardType,
-    home_document: crowdedHome(),
+    home_document: crowdedHome(windowIds(windows)),
     bindings: [
       ...bindings,
       ...(options.room ? [roomBinding] : []),
       ...(options.plug ? [plugBinding] : []),
+      ...(options.neighbours ? neighbourBindings : []),
+      ...windowBindings(windows),
     ],
   });
   document.body.append(card);
@@ -177,6 +217,20 @@ function placeIn3d(where: Record<string, Point>): void {
   vi.spyOn(EstanzaSceneView.prototype, 'pinAnchors').mockImplementation(
     () => new Map(),
   );
+}
+
+function crowdStorey(): void {
+  vi.spyOn(EstanzaSceneView.prototype, 'roomAnchors').mockImplementation(
+    (slugs) =>
+      new Map(slugs.map((slug) => [slug, { x: SPOT.x, y: SPOT.y + 32 }])),
+  );
+  vi.spyOn(EstanzaSceneView.prototype, 'balconyBoxes').mockReturnValue([
+    { ...SPOT, width: 2000, height: 2000 },
+  ]);
+}
+
+function markup(element: Element | null): string {
+  return element?.innerHTML.replace(/<!--.*?-->/g, '').trim() ?? '';
 }
 
 function find(card: EstanzaCard, selector: string): HTMLElement | null {
@@ -840,7 +894,7 @@ describe('picking the marks drawn on the 3D view', () => {
     expect(find(card, '.sheet')).toBeNull();
   });
 
-  it('shows the details of an open door that only reports its state from the chooser', async () => {
+  it('shows the details of an open door that only reports its state from its room sheet, once a crowd hides its mark', async () => {
     placeIn3d(
       Object.fromEntries([
         ...lamps.map((slug) => [`light:${slug}`, SPOT]),
@@ -848,24 +902,34 @@ describe('picking the marks drawn on the 3D view', () => {
       ]),
     );
 
-    const card = await mountCard({ d1Open: true });
+    const card = await mountCard({ d1Open: true, room: true });
     const shown: unknown[] = [];
 
     card.addEventListener('hass-more-info', (event) =>
       shown.push((event as CustomEvent).detail),
     );
-    find(card, '.bubble')?.click();
+    find(card, 'estanza-scene-view')?.dispatchEvent(
+      new CustomEvent('scope-select', {
+        detail: {
+          scopeType: 'room',
+          scopeId: 'living-space',
+          gesture: 'press',
+          x: 120,
+          y: 120,
+        },
+      }),
+    );
     await settle(card);
 
-    const choice = find(card, '.sheet.chooser .choice[data-key="door:d1"]');
+    const row = find(card, '.sheet .row[data-key="door:d1"]');
 
-    expect(choice?.hasAttribute('disabled')).toBe(false);
+    expect(find(card, '.mark[data-key="door:d1"]')).toBeNull();
+    expect(row?.textContent).toContain('Open');
 
-    choice?.click();
+    row?.click();
     await settle(card);
 
     expect(shown).toEqual([{ entityId: 'binary_sensor.door_d1' }]);
-    expect(find(card, '.sheet')).toBeNull();
   });
 });
 
@@ -1257,25 +1321,106 @@ describe('a drawn mark as its own tap target', () => {
     ).toBe(false);
   });
 
-  it('folds every mark of a storey whose pills have no room into its one count bubble', async () => {
+  it('hides the door sensors of a storey whose pills have no room, and keeps its light', async () => {
     placeIn3d({
       'light:living-space-light': SPOT,
       'door:d1': { x: SPOT.x + 60, y: SPOT.y },
     });
-    vi.spyOn(EstanzaSceneView.prototype, 'roomAnchors').mockImplementation(
-      (slugs) =>
-        new Map(slugs.map((slug) => [slug, { x: SPOT.x, y: SPOT.y + 32 }])),
-    );
-    vi.spyOn(EstanzaSceneView.prototype, 'balconyBoxes').mockReturnValue([
-      { ...SPOT, width: 2000, height: 2000 },
-    ]);
+    crowdStorey();
 
     const card = await mountCard({ room: true });
-    const bubble = find(card, '.bubble[data-key^="bubble:floor:"]');
 
     expect(find(card, '.temp')).toBeNull();
-    expect(all(card, '.mark')).toEqual([]);
-    expect(bubble?.textContent?.trim()).toBe('2');
+    expect(find(card, '.bubble')).toBeNull();
+    expect(
+      find(card, '.mark[data-key="light:living-space-light"]'),
+    ).not.toBeNull();
+    expect(find(card, '.mark[data-key="door:d1"]')).toBeNull();
+  });
+
+  it('never folds the lights of two rooms into one bubble', async () => {
+    placeIn3d(
+      Object.fromEntries(
+        [...lamps, ...neighbours].map((slug) => [`light:${slug}`, SPOT]),
+      ),
+    );
+
+    const card = await mountCard({ neighbours: true });
+
+    expect(find(card, '.bubble')).not.toBeNull();
+
+    for (const slug of neighbours) {
+      expect(
+        find(card, `.mark[data-key="light:${slug}"]`),
+        slug,
+      ).not.toBeNull();
+    }
+  });
+
+  it('groups a storey whose pills have no room room by room, never as one bubble', async () => {
+    placeIn3d(
+      Object.fromEntries(
+        [...lamps, ...neighbours].map((slug) => [`light:${slug}`, SPOT]),
+      ),
+    );
+    crowdStorey();
+
+    const card = await mountCard({ room: true, neighbours: true });
+
+    expect(find(card, '.bubble[data-key^="bubble:floor:"]')).toBeNull();
+
+    for (const slug of neighbours) {
+      expect(
+        find(card, `.mark[data-key="light:${slug}"]`),
+        slug,
+      ).not.toBeNull();
+    }
+  });
+
+  it('hides a door sensor that cannot move clear before it folds a light', async () => {
+    placeIn3d(
+      Object.fromEntries([
+        ['door:d1', SPOT],
+        ...lamps.map((slug) => [`light:${slug}`, SPOT]),
+      ]),
+    );
+
+    const card = await mountCard({ d1Open: true });
+    const folded = all(card, '.bubble').map((bubble) =>
+      Number(bubble.textContent?.trim()),
+    );
+    const drawn = all(card, '.mark[data-key^="light:lamp-"]').length;
+
+    expect(find(card, '.mark[data-key="door:d1"]')).toBeNull();
+    expect(
+      all(card, '.bubble').filter((bubble) =>
+        bubble.getAttribute('aria-label')?.includes('door'),
+      ),
+    ).toEqual([]);
+    expect(drawn + folded.reduce((sum, count) => sum + count, 0)).toBe(LAMPS);
+  });
+
+  it('gives a group the icon of its lights, even where window sensors outnumber them', async () => {
+    const windows = 14;
+
+    placeIn3d(
+      Object.fromEntries([
+        ...lamps.map((slug) => [`light:${slug}`, SPOT]),
+        ...windowIds(windows).map((id) => [`window:${id}`, SPOT]),
+      ]),
+    );
+    crowdStorey();
+
+    const card = await mountCard({ room: true, windows });
+    const bulb = find(card, '.mark[data-key^="light:lamp-"] .icon');
+    const bubbles = all(card, '.bubble');
+
+    expect(bulb).not.toBeNull();
+    expect(bubbles).not.toEqual([]);
+
+    for (const bubble of bubbles) {
+      expect(markup(bubble.querySelector('.icon'))).toBe(markup(bulb));
+    }
   });
 
   it('keeps a pill out of the touch reach of a glyph, so the two never read as one', async () => {
@@ -1338,5 +1483,143 @@ describe('a drawn mark as its own tap target', () => {
     expect(rules).toMatch(/\.mark\.under \{[^}]*pointer-events: none;/);
     expect(rules).toMatch(/\.mark\.dot \{[^}]*pointer-events: none;/);
     expect(rules).toMatch(/\.mark\.dot \.disc \{[^}]*pointer-events: auto;/);
+  });
+});
+
+describe('a right-click on the card', () => {
+  function rightButton(
+    element: Element | null,
+    type: string,
+    at: Point,
+  ): MouseEvent {
+    const event = Object.assign(
+      new MouseEvent(type, {
+        clientX: at.x,
+        clientY: at.y,
+        button: 2,
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      }),
+      { pointerType: 'mouse', isPrimary: true },
+    );
+
+    element?.dispatchEvent(event);
+
+    return event;
+  }
+
+  function rightClick(element: Element | null, at: Point): MouseEvent {
+    rightButton(element, 'pointerdown', at);
+
+    const menu = rightButton(element, 'contextmenu', at);
+
+    rightButton(element, 'pointerup', at);
+
+    return menu;
+  }
+
+  async function drawnLight(): Promise<{
+    card: EstanzaCard;
+    mark: HTMLElement | null;
+  }> {
+    placeIn3d({ 'light:living-space-light': SPOT });
+
+    const card = await mountCard();
+
+    return {
+      card,
+      mark: find(card, '.mark[data-key="light:living-space-light"]'),
+    };
+  }
+
+  it('opens the sheet of a light on a right-click on its mark, and keeps the browser menu shut', async () => {
+    const { card, mark } = await drawnLight();
+    const menu = rightClick(mark, SPOT);
+
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    await settle(card);
+
+    expect(menu.defaultPrevented).toBe(true);
+    expect(hass.serviceCalls).toEqual([]);
+    expect(find(card, '.sheet')).not.toBeNull();
+  });
+
+  it('opens the sheet of a light when the menu comes after the release', async () => {
+    const { card, mark } = await drawnLight();
+
+    rightButton(mark, 'pointerdown', SPOT);
+    rightButton(mark, 'pointerup', SPOT);
+
+    const menu = rightButton(mark, 'contextmenu', SPOT);
+
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    await settle(card);
+
+    expect(menu.defaultPrevented).toBe(true);
+    expect(hass.serviceCalls).toEqual([]);
+    expect(find(card, '.sheet')).not.toBeNull();
+  });
+
+  it('never toggles or holds a light on a right button press of its own', async () => {
+    const { card, mark } = await drawnLight();
+
+    rightButton(mark, 'pointerdown', SPOT);
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    rightButton(mark, 'pointerup', SPOT);
+    await settle(card);
+
+    expect(hass.serviceCalls).toEqual([]);
+    expect(find(card, '.sheet')).toBeNull();
+  });
+
+  it('never orbits on a right button drag that starts on a mark', async () => {
+    const { card, mark } = await drawnLight();
+    const orbit = vi.spyOn(EstanzaSceneView.prototype, 'orbitFrom');
+    const away = { x: SPOT.x + 40, y: SPOT.y };
+
+    rightButton(mark, 'pointerdown', SPOT);
+    rightButton(mark, 'pointermove', away);
+    rightButton(mark, 'pointerup', away);
+    await settle(card);
+
+    expect(orbit).not.toHaveBeenCalled();
+    expect(hass.serviceCalls).toEqual([]);
+  });
+
+  it('opens the room sheet on a right-click on a temperature pill', async () => {
+    vi.spyOn(EstanzaSceneView.prototype, 'roomAnchors').mockImplementation(
+      (slugs) => new Map(slugs.map((slug) => [slug, SPOT])),
+    );
+
+    const card = await mountCard({ room: true });
+    const menu = rightClick(find(card, 'button.temp'), SPOT);
+
+    await settle(card);
+
+    expect(menu.defaultPrevented).toBe(true);
+    expect(find(card, '.sheet')).not.toBeNull();
+  });
+
+  it('keeps an open sheet open on a right-click clear of every thing', async () => {
+    const { card, mark } = await drawnLight();
+
+    rightClick(mark, SPOT);
+    await settle(card);
+    rightClick(find(card, 'estanza-scene-view'), { x: 380, y: 20 });
+    await settle(card);
+
+    expect(find(card, '.sheet')).not.toBeNull();
+    expect(hass.serviceCalls).toEqual([]);
+  });
+
+  it('leaves the browser menu alone over the view switch', async () => {
+    const { card } = await drawnLight();
+    const menu = rightClick(find(card, '.views button[data-view="2d"]'), SPOT);
+
+    await settle(card);
+
+    expect(menu.defaultPrevented).toBe(false);
+    expect(find(card, '.sheet')).toBeNull();
   });
 });

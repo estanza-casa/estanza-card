@@ -10,6 +10,8 @@ import {
   RELEASE_REPO,
 } from './github-release.ts';
 import {
+  API_LATEST_CARD_PATH,
+  apiLatestCardReminder,
   nextVersion,
   parseReleaseArgs,
   RELEASE_BRANCH,
@@ -74,6 +76,7 @@ if (options.dryRun) {
   console.log(
     `  then, as the GitHub App, create the ${releaseKind} ${tag} on ${RELEASE_REPO} and upload ${asset}`,
   );
+  remindApiBump();
   process.exit(0);
 }
 
@@ -112,6 +115,18 @@ try {
   console.log(`Released ${tag}${options.draft ? ' as a draft' : ''}: ${url}`);
 } catch (error) {
   fail(`${tag} is pushed but the ${releaseKind} failed: ${messageOf(error)}`);
+}
+
+remindApiBump();
+
+function remindApiBump(): void {
+  const apiPath = `${cardRoot}${API_LATEST_CARD_PATH}`;
+  const reminder = apiLatestCardReminder(
+    existsSync(apiPath) ? readFileSync(apiPath, 'utf8') : null,
+    version,
+  );
+
+  if (reminder) console.log(reminder);
 }
 
 function gitSteps(release: ReleaseOptions): string[][] {

@@ -2,6 +2,8 @@ export const DRAG_THRESHOLD_PX = 8;
 export const LONG_PRESS_MS = 450;
 export const TARGET_RADIUS_PX = 22;
 
+const SECONDARY_BUTTON = 2;
+
 export type Point = { x: number; y: number };
 
 export type Gesture = 'tap' | 'press' | 'drag';
@@ -69,6 +71,10 @@ export class GestureTracker {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
   }
+}
+
+export function isSecondaryPress(event: MouseEvent): boolean {
+  return event.button === SECONDARY_BUTTON;
 }
 
 export function pickTarget(

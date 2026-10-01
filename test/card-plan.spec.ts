@@ -637,6 +637,44 @@ describe('marks and temperatures while the view switches', () => {
     expect(spotOf(card, pill)).not.toBeNull();
   });
 
+  it('opens the sheet of a light on a right-click on its mark on the plan, and keeps the browser menu shut', async () => {
+    drawPlansAt({ width: 800, height: 600 });
+
+    const card = await mountSpotted();
+
+    await pick(card, '2d');
+
+    const mark = card.shadowRoot?.querySelector(lamp);
+    const right = (type: string): MouseEvent => {
+      const event = Object.assign(
+        new MouseEvent(type, {
+          clientX: planSpot.x,
+          clientY: planSpot.y,
+          button: 2,
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+        }),
+        { pointerType: 'mouse', isPrimary: true },
+      );
+
+      mark?.dispatchEvent(event);
+
+      return event;
+    };
+
+    right('pointerdown');
+
+    const menu = right('contextmenu');
+
+    right('pointerup');
+    await wait(card, 1000);
+
+    expect(menu.defaultPrevented).toBe(true);
+    expect(hass.serviceCalls).toEqual([]);
+    expect(sheetTitle(card)).not.toBeNull();
+  });
+
   it('lays marks out unseen at their plan spots while the camera turns to the plan', async () => {
     const scene = drawableScene();
     const card = await mountSpotted();

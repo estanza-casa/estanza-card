@@ -21,6 +21,149 @@ export const NO_HOME_WORDS = 'Pick a home in the card settings';
 
 export const NEWER_WORDS = 'A newer Estanza card is available in HACS.';
 
+export const RELEASES_URL =
+  'https://github.com/estanza-casa/estanza-card/releases';
+
+const DISMISSED_UPDATE_KEY = 'estanza-card.update-dismissed';
+
+type Version = [number, number, number];
+
+export function manualUpdateWords(latest: string): string {
+  return `Estanza card ${latest} is out.`;
+}
+
+export function releaseUrl(latest: string): string {
+  return `${RELEASES_URL}/tag/v${latest}`;
+}
+
+function versionOf(text: string): Version | null {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(text);
+
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
+}
+
+function isOlder(own: Version, latest: Version): boolean {
+  const differs = own.findIndex((part, index) => part !== latest[index]);
+
+  return differs !== -1 && own[differs] < latest[differs];
+}
+
+export function latestCardVersionOf(body: unknown): string | null {
+  if (typeof body !== 'object' || body === null) return null;
+
+  const latest: unknown = Reflect.get(body, 'latestCardVersion');
+
+  return typeof latest === 'string' && versionOf(latest) ? latest : null;
+}
+
+export function installedByHand(scriptUrl: string): boolean {
+  try {
+    const path = new URL(scriptUrl).pathname;
+
+    // HACS keeps its downloads in www/community/, which Home Assistant also serves under /local/.
+    return path.includes('/local/') && !path.includes('/local/community/');
+  } catch {
+    return false;
+  }
+}
+
+export function manualUpdateDue(
+  own: string,
+  latest: string | null,
+  scriptUrl: string,
+): boolean {
+  if (latest === null || !installedByHand(scriptUrl)) return false;
+
+  const ownVersion = versionOf(own);
+  const latestVersion = versionOf(latest);
+
+  return (
+    ownVersion !== null &&
+    latestVersion !== null &&
+    isOlder(ownVersion, latestVersion)
+  );
+}
+
+export function readDismissedUpdate(): string | null {
+  try {
+    return localStorage.getItem(DISMISSED_UPDATE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function writeDismissedUpdate(latest: string): void {
+  try {
+    localStorage.setItem(DISMISSED_UPDATE_KEY, latest);
+  } catch {
+    return;
+  }
+}
+
+export function manualUpdateTemplate(
+  latest: string,
+  dismiss: () => void,
+): TemplateResult {
+  return html`<div class="manual-update" role="status">
+    <p>
+      ${manualUpdateWords(latest)}
+      <a href=${releaseUrl(latest)} target="_blank" rel="noopener noreferrer"
+        >How to update</a
+      >
+    </p>
+    <button
+      type="button"
+      aria-label="Dismiss"
+      title="Dismiss"
+      @click=${dismiss}
+    >
+      ${icon('x', 16)}
+    </button>
+  </div>`;
+}
+
+export const manualUpdateStyles = css`
+  .manual-update {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+    padding-left: 16px;
+    border-top: 1px solid var(--divider-color);
+    font-size: 12px;
+    line-height: 1.3;
+    color: var(--secondary-text-color);
+  }
+
+  .manual-update p {
+    flex: 1;
+    margin: 0;
+  }
+
+  .manual-update a {
+    color: var(--primary-color);
+    text-decoration: none;
+  }
+
+  .manual-update a:hover {
+    text-decoration: underline;
+  }
+
+  .manual-update button {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: ${unsafeCSS(tokens.layout.minHitTarget)}px;
+    height: ${unsafeCSS(tokens.layout.minHitTarget)}px;
+    padding: 0;
+    border: 0;
+    border-radius: ${unsafeCSS(tokens.radius.md)}px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+  }
+`;
+
 export function cardHeaders(
   headers: Record<string, string> = {},
 ): Record<string, string> {

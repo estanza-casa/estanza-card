@@ -432,12 +432,32 @@ function pointer(
   element: EstanzaPlanView,
   type: string,
   at: { x: number; y: number },
-): void {
-  element.shadowRoot
-    ?.querySelector('canvas')
-    ?.dispatchEvent(
-      new MouseEvent(type, { clientX: at.x, clientY: at.y, bubbles: true }),
-    );
+  button = 0,
+): MouseEvent {
+  const event = new MouseEvent(type, {
+    clientX: at.x,
+    clientY: at.y,
+    button,
+    bubbles: true,
+    cancelable: true,
+  });
+
+  element.shadowRoot?.querySelector('canvas')?.dispatchEvent(event);
+
+  return event;
+}
+
+function rightClick(
+  element: EstanzaPlanView,
+  at: { x: number; y: number },
+): MouseEvent {
+  pointer(element, 'pointerdown', at, 2);
+
+  const menu = pointer(element, 'contextmenu', at, 2);
+
+  pointer(element, 'pointerup', at, 2);
+
+  return menu;
 }
 
 function selections(element: EstanzaPlanView): ScopeSelectDetail[] {
@@ -3088,6 +3108,89 @@ describe('picking on the plan', () => {
         gesture: 'tap',
       }),
     ]);
+  });
+
+  it('reads a right-click on a glyph as a press and keeps the browser menu shut', async () => {
+    vi.useFakeTimers();
+
+    const element = await mountPlan();
+    const seen = selections(element);
+    const bulb = screenPoint(element, { type: 'light', id: 'hall-light' });
+    const menu = rightClick(element, bulb);
+
+    vi.advanceTimersByTime(LONG_PRESS_MS + 10);
+
+    expect(menu.defaultPrevented).toBe(true);
+    expect(seen).toEqual([
+      expect.objectContaining({
+        scopeType: 'light',
+        scopeId: 'hall-light',
+        gesture: 'press',
+      }),
+    ]);
+  });
+
+  it('reads a right-click whose menu comes after the release as one press', async () => {
+    vi.useFakeTimers();
+
+    const element = await mountPlan();
+    const seen = selections(element);
+    const bulb = screenPoint(element, { type: 'light', id: 'hall-light' });
+
+    pointer(element, 'pointerdown', bulb, 2);
+    pointer(element, 'pointerup', bulb, 2);
+
+    const menu = pointer(element, 'contextmenu', bulb, 2);
+
+    vi.advanceTimersByTime(LONG_PRESS_MS + 10);
+
+    expect(menu.defaultPrevented).toBe(true);
+    expect(seen.map((detail) => detail.gesture)).toEqual(['press']);
+  });
+
+  it('never reads a right button press as a tap or a hold of its own', async () => {
+    vi.useFakeTimers();
+
+    const element = await mountPlan();
+    const seen = selections(element);
+    const bulb = screenPoint(element, { type: 'light', id: 'hall-light' });
+
+    pointer(element, 'pointerdown', bulb, 2);
+    vi.advanceTimersByTime(LONG_PRESS_MS + 10);
+    pointer(element, 'pointerup', bulb, 2);
+
+    expect(seen).toEqual([]);
+  });
+
+  it('opens nothing on a right-click outside the home, and keeps the browser menu shut', async () => {
+    const element = await mountPlan();
+    const seen = selections(element);
+    const menu = rightClick(element, { x: 1, y: 1 });
+
+    expect(menu.defaultPrevented).toBe(true);
+    expect(seen).toEqual([]);
+  });
+
+  it('opens no press from a menu the keyboard or a touch hold asked for', async () => {
+    const element = await mountPlan();
+    const seen = selections(element);
+    const bulb = screenPoint(element, { type: 'light', id: 'hall-light' });
+    const menu = pointer(element, 'contextmenu', bulb);
+
+    expect(menu.defaultPrevented).toBe(true);
+    expect(seen).toEqual([]);
+  });
+
+  it('leaves the browser menu alone while it is not interactive', async () => {
+    const element = await mountPlan((view) => {
+      view.interactive = false;
+    });
+    const seen = selections(element);
+    const bulb = screenPoint(element, { type: 'light', id: 'hall-light' });
+    const menu = rightClick(element, bulb);
+
+    expect(menu.defaultPrevented).toBe(false);
+    expect(seen).toEqual([]);
   });
 
   it('ignores every touch while it is not interactive', async () => {

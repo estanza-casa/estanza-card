@@ -55,6 +55,7 @@ import {
 import { floorName, floorOfScope, type Storey, storeys } from './floors.js';
 import {
   GestureTracker,
+  isSecondaryPress,
   type Point,
   type ScreenAnchor,
   TARGET_RADIUS_PX,
@@ -606,6 +607,8 @@ export class EstanzaPlanView extends LitElement {
   private readonly gestures = new GestureTracker((at) =>
     this.report(at, 'press'),
   );
+
+  private menuPress = false;
 
   render(): TemplateResult {
     return html`<canvas
@@ -2974,7 +2977,9 @@ export class EstanzaPlanView extends LitElement {
   }
 
   private onPointerDown = (event: PointerEvent): void => {
-    if (!this.interactive) return;
+    this.menuPress = isSecondaryPress(event);
+
+    if (!this.interactive || this.menuPress) return;
     if (event.isPrimary !== false) this.gestures.cancel();
 
     this.swipeFrom = this.localPoint(event);
@@ -2986,6 +2991,8 @@ export class EstanzaPlanView extends LitElement {
   };
 
   private onPointerUp = (event: PointerEvent): void => {
+    if (isSecondaryPress(event)) return;
+
     const at = this.localPoint(event);
     const from = this.swipeFrom;
 
@@ -3020,8 +3027,15 @@ export class EstanzaPlanView extends LitElement {
     );
   }
 
-  private onContextMenu = (event: Event): void => {
-    if (this.interactive) event.preventDefault();
+  private onContextMenu = (event: MouseEvent): void => {
+    if (!this.interactive) return;
+
+    event.preventDefault();
+
+    if (!this.menuPress) return;
+
+    this.menuPress = false;
+    this.report(this.localPoint(event), 'press');
   };
 
   private report(at: Point, gesture: SceneGesture): void {

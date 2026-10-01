@@ -4,10 +4,10 @@ A dashboard card that shows your Estanza home in Home Assistant, in 3D or as a f
 
 Turn on the kitchen light and the kitchen in the model lights up, in the colour and brightness the bulb reports. Open the front door and the door in the model swings open. Rooms show their temperature, and a room with motion or presence is outlined. Tap a light, a cover, a lock or a room to control it.
 
-| 3D, light theme                                                   | 3D, dark theme                                                  |
-| ----------------------------------------------------------------- | --------------------------------------------------------------- |
+| 3D, light theme                                                                                                                    | 3D, dark theme                                                                                                                   |
+| ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | ![The 3D card in a light theme](https://raw.githubusercontent.com/estanza-casa/estanza-card/main/docs/images/card-3d-light.png)    | ![The 3D card in a dark theme](https://raw.githubusercontent.com/estanza-casa/estanza-card/main/docs/images/card-3d-dark.png)    |
-| **Floor plan, light theme**                                       | **Floor plan, dark theme**                                      |
+| **Floor plan, light theme**                                                                                                        | **Floor plan, dark theme**                                                                                                       |
 | ![The floor plan in a light theme](https://raw.githubusercontent.com/estanza-casa/estanza-card/main/docs/images/card-2d-light.png) | ![The floor plan in a dark theme](https://raw.githubusercontent.com/estanza-casa/estanza-card/main/docs/images/card-2d-dark.png) |
 
 The screenshots show Casa Aurora, the Estanza demo home.
@@ -135,6 +135,7 @@ Every action goes through Home Assistant in your browser, with your own login. N
 - The room sheet has one switch for all the room's lights, its temperature and humidity, and its devices, doors and windows.
 - The thing changes at once. If Home Assistant refuses the call or does not confirm it within 5 seconds, it goes back and a message offers to try again.
 - A drag rotates the view and never toggles anything.
+- With a mouse, a right-click is a hold. A right-click on empty space does nothing.
 - Every mark works with the keyboard: Tab to move, Enter or Space to tap, Shift+F10 or the menu key to hold.
 - A window with only a sensor cannot be opened from the card. Link a cover to open it.
 - `interaction: none` makes the card read only. You can still rotate the view.
@@ -284,6 +285,8 @@ The card editor footer shows the running version, and the browser console prints
 
 When a newer card is suggested, the editor shows "A newer Estanza card is available in HACS." When your home needs a newer card, the card shows "This home needs a newer Estanza card. Update it in HACS." instead of the home.
 
+HACS does not update a card you installed by hand. A card loaded from `/local/` shows a quiet line under the home when a newer card is out, with a link to the release. To update, download the new `estanza-card.js` from that release, replace the file in `<config>/www/`, and reload the dashboard. Dismissing the line hides it until the next release.
+
 ## Troubleshooting
 
 - **The card does not load after a manual install.** Open `/local/estanza-card.js` in the browser. A 404 means Home Assistant needs a restart because `www/` was created after it started.
@@ -305,6 +308,13 @@ corepack pnpm check
 ```
 
 `check` runs `lint:check`, `format:check`, `typecheck`, `test` and `build`, and stops at the first failure. Run it before every commit; this repository has no CI. `build` writes `dist/estanza-card.js`.
+
+### Releasing
+
+1. Run `corepack pnpm release <patch|minor|major>` from a clean `main`. Add `--dry-run` first to see what it would do.
+2. Bump `LATEST_CARD_VERSION` in the Estanza api (`apps/api/src/app/modules/integration/integration.service.ts`) to the version you just released, and ship that change. Cards installed by hand learn about a release only from that constant. Bump it after the release exists, so the link the card shows never points at a missing release.
+
+`release` reads that constant from an Estanza checkout next to this one (`../estanza`) and, when it does not match the release, ends by printing `Bump LATEST_CARD_VERSION in the estanza api to <version>`. Without that checkout it prints the reminder every time.
 
 ### A local Home Assistant
 

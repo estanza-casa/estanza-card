@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_APP_KEY_PATH } from '../scripts/github-release.ts';
 import {
+  apiLatestCardReminder,
   nextVersion,
   parseReleaseArgs,
   releaseRefusals,
@@ -158,6 +159,33 @@ describe('release arguments', () => {
   it('refuses to skip pushing main outside a draft', () => {
     expect(parseReleaseArgs(['patch', '--no-push-main'])).toBe(
       '--no-push-main only makes a draft, so it needs --draft.',
+    );
+  });
+});
+
+describe('the latest card version the api names', () => {
+  const apiSource = (version: string): string =>
+    `const MISS_DAY_MS = 86_400_000;\nexport const LATEST_CARD_VERSION = '${version}';\n`;
+
+  it('says nothing when the api already names this release', () => {
+    expect(apiLatestCardReminder(apiSource('1.0.3'), '1.0.3')).toBeNull();
+  });
+
+  it('names the version the api still states when it is behind', () => {
+    expect(apiLatestCardReminder(apiSource('1.0.2'), '1.0.3')).toBe(
+      'Bump LATEST_CARD_VERSION in the estanza api to 1.0.3. It still says 1.0.2, so cards installed by hand are not told about this release.',
+    );
+  });
+
+  it('reminds plainly when there is no estanza checkout beside the card', () => {
+    expect(apiLatestCardReminder(null, '1.0.3')).toBe(
+      'Bump LATEST_CARD_VERSION in the estanza api to 1.0.3.',
+    );
+  });
+
+  it('reminds plainly when the checkout no longer declares the constant', () => {
+    expect(apiLatestCardReminder('export {};', '1.0.3')).toBe(
+      'Bump LATEST_CARD_VERSION in the estanza api to 1.0.3.',
     );
   });
 });

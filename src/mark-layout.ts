@@ -9,12 +9,17 @@ export type MarkRequest = ScreenAnchor &
     rank: number;
     fixed: boolean;
     still?: boolean;
+    passive?: boolean;
+    room?: string | null;
     avoid?: readonly MarkBox[];
   };
 
 export type LaidMark = ScreenAnchor & { anchor: Point };
 
-export type MarkBubble = ScreenAnchor & { members: string[] };
+export type MarkBubble = ScreenAnchor & {
+  members: string[];
+  room: string | null;
+};
 
 export type MarkLayout = {
   marks: LaidMark[];
@@ -35,7 +40,8 @@ export type MarkSpots = {
 
 export type HitTarget = { key: string; shown: Box; hit: Box; fixed: boolean };
 
-type Placed = LaidMark & LabelSize & { fixed: boolean; still: boolean };
+type Placed = LaidMark &
+  LabelSize & { fixed: boolean; still: boolean; room: string | null };
 
 const STILL_GAP_PX = 6;
 const SHIFT_STEP_PX = 8;
@@ -54,6 +60,8 @@ export function layoutMarks(
     .sort(
       (a, b) =>
         Number(b.request.fixed) - Number(a.request.fixed) ||
+        Number(a.request.passive ?? false) -
+          Number(b.request.passive ?? false) ||
         b.request.rank - a.request.rank ||
         a.index - b.index,
     )
@@ -79,6 +87,7 @@ export function layoutMarks(
   for (const request of ordered) {
     const anchor = { x: request.x, y: request.y };
     const still = request.still ?? false;
+    const room = request.room ?? null;
 
     const box = { ...anchor, width: request.width, height: request.height };
 
@@ -100,6 +109,7 @@ export function layoutMarks(
         height: request.height,
         fixed,
         still,
+        room,
       });
     };
 
@@ -119,7 +129,15 @@ export function layoutMarks(
       continue;
     }
 
-    if (!fold(request, anchor, placed, bubbles, touch)) lay(anchor, false);
+    if (request.passive) {
+      hidden.push(request.key);
+
+      continue;
+    }
+
+    if (!fold(request.key, anchor, room, placed, bubbles, touch)) {
+      lay(anchor, false);
+    }
   }
 
   return {
@@ -177,22 +195,29 @@ function shiftedSpot(
 }
 
 function fold(
-  request: MarkRequest,
+  key: string,
   anchor: Point,
+  room: string | null,
   placed: Placed[],
   bubbles: MarkBubble[],
   touch: number,
 ): boolean {
-  const bubble = bubbles.find((other) => !apart(anchor, other, touch));
+  const bubble = bubbles.find(
+    (other) => other.room === room && !apart(anchor, other, touch),
+  );
 
   if (bubble) {
-    bubble.members.push(request.key);
+    bubble.members.push(key);
 
     return true;
   }
 
   const index = placed.findIndex(
-    (other) => !other.fixed && !other.still && !apart(anchor, other, touch),
+    (other) =>
+      other.room === room &&
+      !other.fixed &&
+      !other.still &&
+      !apart(anchor, other, touch),
   );
 
   if (index < 0) return false;
@@ -203,7 +228,8 @@ function fold(
     key: `bubble:${host.key}`,
     x: host.x,
     y: host.y,
-    members: [host.key, request.key],
+    members: [host.key, key],
+    room,
   });
 
   return true;

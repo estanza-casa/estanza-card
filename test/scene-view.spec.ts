@@ -37,7 +37,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import packageJson from '../package.json';
 import { CameraRig } from '../src/camera-rig.js';
-import type { Point } from '../src/gesture.js';
+import { LONG_PRESS_MS, type Point } from '../src/gesture.js';
 import {
   aboveOf,
   applyOverlay,
@@ -1846,8 +1846,14 @@ describe('a new set of storeys on show', () => {
 });
 
 describe('scene gestures', () => {
-  function pointer(type: string, x: number, y: number): Event {
-    return new MouseEvent(type, { clientX: x, clientY: y, bubbles: true });
+  function pointer(type: string, x: number, y: number, button = 0): Event {
+    return new MouseEvent(type, {
+      clientX: x,
+      clientY: y,
+      button,
+      bubbles: true,
+      cancelable: true,
+    });
   }
 
   async function gesturingView(interactive = true) {
@@ -1953,6 +1959,85 @@ describe('scene gestures', () => {
     stage.dispatchEvent(pointer('pointerdown', 50, 60));
     stage.dispatchEvent(pointer('pointerup', 50, 60));
 
+    expect(heard).not.toHaveBeenCalled();
+  });
+
+  it('reads a right-click on a bound object as a press and keeps the browser menu shut', async () => {
+    const { stage, heard } = await gesturingView();
+    const menu = pointer('contextmenu', 50, 60, 2);
+
+    vi.useFakeTimers();
+    stage.dispatchEvent(pointer('pointerdown', 50, 60, 2));
+    stage.dispatchEvent(menu);
+    stage.dispatchEvent(pointer('pointerup', 50, 60, 2));
+    vi.advanceTimersByTime(LONG_PRESS_MS + 10);
+
+    expect(menu.defaultPrevented).toBe(true);
+    expect(heard).toHaveBeenCalledTimes(1);
+    expect(heard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scopeType: 'light',
+        scopeId: 'living-space-light',
+        gesture: 'press',
+      }),
+    );
+  });
+
+  it('reads a right-click whose menu comes after the release as one press', async () => {
+    const { stage, heard } = await gesturingView();
+
+    stage.dispatchEvent(pointer('pointerdown', 50, 60, 2));
+    stage.dispatchEvent(pointer('pointerup', 50, 60, 2));
+    stage.dispatchEvent(pointer('contextmenu', 50, 60, 2));
+
+    expect(heard).toHaveBeenCalledTimes(1);
+    expect(heard).toHaveBeenCalledWith(
+      expect.objectContaining({ gesture: 'press' }),
+    );
+  });
+
+  it('never reads a right button press as a tap or a hold of its own', async () => {
+    const { stage, heard } = await gesturingView();
+
+    vi.useFakeTimers();
+    stage.dispatchEvent(pointer('pointerdown', 50, 60, 2));
+    vi.advanceTimersByTime(LONG_PRESS_MS + 10);
+    stage.dispatchEvent(pointer('pointerup', 50, 60, 2));
+
+    expect(heard).not.toHaveBeenCalled();
+  });
+
+  it('opens nothing on a right-click on empty space, and keeps the browser menu shut', async () => {
+    const { stage, heard, picked } = await gesturingView();
+    const menu = pointer('contextmenu', 50, 60, 2);
+
+    picked.mockReturnValue(null);
+    stage.dispatchEvent(pointer('pointerdown', 50, 60, 2));
+    stage.dispatchEvent(menu);
+    stage.dispatchEvent(pointer('pointerup', 50, 60, 2));
+
+    expect(menu.defaultPrevented).toBe(true);
+    expect(heard).not.toHaveBeenCalled();
+  });
+
+  it('opens no press from a menu the keyboard or a touch hold asked for', async () => {
+    const { stage, heard } = await gesturingView();
+    const menu = pointer('contextmenu', 50, 60);
+
+    stage.dispatchEvent(menu);
+
+    expect(menu.defaultPrevented).toBe(true);
+    expect(heard).not.toHaveBeenCalled();
+  });
+
+  it('leaves the browser menu alone while read only', async () => {
+    const { stage, heard } = await gesturingView(false);
+    const menu = pointer('contextmenu', 50, 60, 2);
+
+    stage.dispatchEvent(pointer('pointerdown', 50, 60, 2));
+    stage.dispatchEvent(menu);
+
+    expect(menu.defaultPrevented).toBe(false);
     expect(heard).not.toHaveBeenCalled();
   });
 });

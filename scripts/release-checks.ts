@@ -111,6 +111,26 @@ export function releaseRefusals(
   return refusals;
 }
 
+export const API_LATEST_CARD_PATH =
+  '../estanza/apps/api/src/app/modules/integration/integration.service.ts';
+
+export function apiLatestCardReminder(
+  apiSource: string | null,
+  version: string,
+): string | null {
+  const stated = apiSource
+    ? /LATEST_CARD_VERSION = '([^']*)'/.exec(apiSource)?.[1]
+    : undefined;
+
+  if (stated === version) return null;
+
+  const reminder = `Bump LATEST_CARD_VERSION in the estanza api to ${version}`;
+
+  if (stated === undefined) return `${reminder}.`;
+
+  return `${reminder}. It still says ${stated}, so cards installed by hand are not told about this release.`;
+}
+
 function isBump(value: string | undefined): value is Bump {
   return bumps.some((bump) => bump === value);
 }

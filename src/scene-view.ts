@@ -94,6 +94,7 @@ import {
   cardHeaders,
   cardUpdateOf,
   homeTooNew,
+  latestCardVersionOf,
   OUTDATED_WORDS,
 } from './card-update.js';
 import {
@@ -105,6 +106,7 @@ import {
 } from './floors.js';
 import {
   GestureTracker,
+  isSecondaryPress,
   pickTarget,
   type Point,
   type ScreenAnchor,
@@ -1318,6 +1320,8 @@ export class EstanzaSceneView extends LitElement {
 
   private verdict: CardUpdate = 'ok';
 
+  @state() private latest: string | null = null;
+
   @state() private contextLost = false;
 
   @state() private furnitureBroken = false;
@@ -1442,11 +1446,15 @@ export class EstanzaSceneView extends LitElement {
 
   private announcedOutdated = false;
 
+  private announcedLatest: string | null = null;
+
   private motionQuery: MediaQueryList | null = null;
 
   private readonly gestures = new GestureTracker((at) =>
     this.report(at, 'press'),
   );
+
+  private menuPress = false;
 
   private readonly rig = new CameraRig(
     () => {
@@ -1472,6 +1480,10 @@ export class EstanzaSceneView extends LitElement {
 
   get cardUpdate(): CardUpdate {
     return this.verdict;
+  }
+
+  get latestCardVersion(): string | null {
+    return this.latest;
   }
 
   get qualityTier(): NamedTier {
@@ -2022,10 +2034,12 @@ export class EstanzaSceneView extends LitElement {
 
     if (
       this.home !== this.announcedHome ||
-      outdated !== this.announcedOutdated
+      outdated !== this.announcedOutdated ||
+      this.latest !== this.announcedLatest
     ) {
       this.announcedHome = this.home;
       this.announcedOutdated = outdated;
+      this.announcedLatest = this.latest;
       this.dispatchEvent(new Event('home-change'));
       // Paint only after the card has answered the new home, so the first paint already has its floor.
       queueMicrotask(() => this.requestUpdate());
@@ -2199,6 +2213,8 @@ export class EstanzaSceneView extends LitElement {
 
       if (controller.signal.aborted) return;
 
+      this.latest = latestCardVersionOf(body);
+
       if (homeTooNew(body.home?.document)) {
         this.outdate();
 
@@ -2309,6 +2325,8 @@ export class EstanzaSceneView extends LitElement {
       const body = (await response.json()) as { home?: SharedHome };
 
       if (controller.signal.aborted) return;
+
+      this.latest = latestCardVersionOf(body);
 
       if (homeTooNew(body.home?.document)) {
         this.outdate();
@@ -3187,6 +3205,9 @@ export class EstanzaSceneView extends LitElement {
   }
 
   private onPointerDown = (event: PointerEvent): void => {
+    this.menuPress = isSecondaryPress(event);
+
+    if (this.menuPress) return;
     if (event.isPrimary !== false) this.forgetPointers();
 
     this.pointers.add(event.pointerId);
@@ -3211,6 +3232,8 @@ export class EstanzaSceneView extends LitElement {
   };
 
   private onPointerUp = (event: PointerEvent): void => {
+    if (isSecondaryPress(event)) return;
+
     const at = this.localPoint(event);
     const swiped = this.swiped(event);
 
@@ -3252,8 +3275,15 @@ export class EstanzaSceneView extends LitElement {
     this.gestures.cancel();
   };
 
-  private onContextMenu = (event: Event): void => {
-    if (this.interactive) event.preventDefault();
+  private onContextMenu = (event: MouseEvent): void => {
+    if (!this.interactive) return;
+
+    event.preventDefault();
+
+    if (!this.menuPress) return;
+
+    this.menuPress = false;
+    this.report(this.localPoint(event), 'press');
   };
 
   private report(at: Point, gesture: SceneGesture): void {

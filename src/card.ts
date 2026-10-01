@@ -73,7 +73,16 @@ import {
   SHEET_GLIDE_MS,
   type SheetMove,
 } from './camera-rig.js';
-import { type Face, faceStyles, faceTemplate } from './card-update.js';
+import {
+  type Face,
+  faceStyles,
+  faceTemplate,
+  manualUpdateDue,
+  manualUpdateStyles,
+  manualUpdateTemplate,
+  readDismissedUpdate,
+  writeDismissedUpdate,
+} from './card-update.js';
 import { type HighlightDetail, highlightEvent } from './config-editor.js';
 import {
   CONFIRM_GAP_MS,
@@ -152,6 +161,7 @@ import {
 import {
   DRAG_THRESHOLD_PX,
   GestureTracker,
+  isSecondaryPress,
   LONG_PRESS_MS,
   type Point,
   TARGET_RADIUS_PX,
@@ -321,7 +331,7 @@ import {
   tileStoreyClear,
   tileStyles,
 } from './tile-view.js';
-import { logCardVersion } from './version.js';
+import { cardScriptUrl, cardVersion, logCardVersion } from './version.js';
 
 type Mark = { phase: MarkPhase; at: Point };
 
@@ -683,6 +693,7 @@ export class EstanzaCard extends LitElement {
     ${alertStyles}
     ${tileStyles}
     ${faceStyles}
+    ${manualUpdateStyles}
 
     :host {
       display: block;
@@ -798,6 +809,12 @@ export class EstanzaCard extends LitElement {
   @property({ reflect: true }) layout?: string;
 
   @property({ type: Boolean }) preview = false;
+
+  @property({ attribute: false }) scriptUrl = cardScriptUrl;
+
+  @state() private latestCard: string | null = null;
+
+  @state() private dismissedUpdate = readDismissedUpdate();
 
   @state() private highlight: SceneScope | null = null;
 
@@ -959,6 +976,7 @@ export class EstanzaCard extends LitElement {
   private markDrag: (Point & { id: number }) | null = null;
   private pressedMark: { scope: SceneScope; at: Point } | null = null;
   private markTouch: { x: number; y: number; at: number } | null = null;
+  private menuPress = false;
 
   private readonly markGestures = new GestureTracker(() =>
     this.selectMark('press'),
@@ -1540,6 +1558,7 @@ export class EstanzaCard extends LitElement {
           @pointerdown=${this.onStagePointer}
           @pointerup=${this.onStageRelease}
           @pointermove=${this.onStageMove}
+          @contextmenu=${this.onStageMenu}
         >
           <div class="dock">
             ${this.renderViewSwitch()}${this.renderFloors()}${this.renderPages()}
@@ -1589,8 +1608,26 @@ export class EstanzaCard extends LitElement {
           ${this.renderBanner()} ${this.renderControls(laid, labels)}
           ${this.renderShield()}
         </div>
+        ${this.renderManualUpdate()}
       </ha-card>
     `;
+  }
+
+  private renderManualUpdate(): TemplateResult | typeof nothing {
+    const latest = this.latestCard;
+
+    if (
+      latest === null ||
+      latest === this.dismissedUpdate ||
+      !manualUpdateDue(cardVersion, latest, this.scriptUrl)
+    ) {
+      return nothing;
+    }
+
+    return manualUpdateTemplate(latest, () => {
+      this.dismissedUpdate = latest;
+      writeDismissedUpdate(latest);
+    });
   }
 
   private get stageStyle(): string {
@@ -2767,6 +2804,7 @@ export class EstanzaCard extends LitElement {
     const home = this.sceneView?.sharedHome?.document ?? null;
 
     this.outdated = this.sceneView?.sceneStatus === 'outdated';
+    this.latestCard = this.sceneView?.latestCardVersion ?? null;
 
     if (!home) {
       this.homeFloors = null;
@@ -2890,9 +2928,7 @@ export class EstanzaCard extends LitElement {
       return {
         key: `mark:${key}`,
         at,
-        room:
-          this.roomOfPiece(control.scope) ??
-          roomOfOpening(this.homeFloors?.floors ?? [], control.scope),
+        room: this.roomOfMark(control.scope),
         template: markTemplate({
           control,
           at: mark?.phase === 'armed' ? this.insideStage(at, ARMED_BOX) : at,
@@ -2921,7 +2957,7 @@ export class EstanzaCard extends LitElement {
       return {
         key: `bubble:${bubble.key}`,
         at,
-        room: null,
+        room: bubble.room,
         template: bubbleTemplate({
           key: bubble.key,
           at,
@@ -2962,8 +2998,17 @@ export class EstanzaCard extends LitElement {
     this.pressedMark = null;
   }
 
-  private laidMarks(): LaidMarks {
-    const placed = this.placedMarks();
+  private laidMarks(crowded: ReadonlySet<string> = new Set()): LaidMarks {
+    const shown = this.placedMarks();
+    const tucked = shown
+      .filter(
+        ({ key, control }) =>
+          crowded.has(this.floorOf(control.scope) ?? '') &&
+          this.isPassive(key) &&
+          !this.isFixed(key),
+      )
+      .map(({ key }) => key);
+    const placed = shown.filter(({ key }) => !tucked.includes(key));
     const plan = this.view === '2d' ? this.planView : null;
     const words = plan?.wordBoxes() ?? [];
     const stairWords = words.filter((word) => word.key.startsWith('stair:'));
@@ -2990,6 +3035,8 @@ export class EstanzaCard extends LitElement {
         rank: dot ? 0 : 1,
         fixed,
         still: dot,
+        passive: this.isPassive(shown.key),
+        room: this.roomOfMark(shown.control.scope),
         avoid: dot ? words : stairWords,
       };
     });
@@ -3012,7 +3059,7 @@ export class EstanzaCard extends LitElement {
         ...bubble,
         host: byKey.get(bubble.members[0]) ?? null,
       })),
-      hidden: layout.hidden,
+      hidden: [...tucked, ...layout.hidden],
     };
   }
 
@@ -3050,84 +3097,7 @@ export class EstanzaCard extends LitElement {
   private groupedMarks(laid: LaidMarks): LaidMarks {
     if (this.view !== '3d' || this.groupedFloors.size === 0) return laid;
 
-    const floorOfKey = (key: string): string | null => {
-      const control = this.controlOfMark(key);
-
-      return control ? (this.floorOf(control.scope) ?? '') : null;
-    };
-    const grouped = (key: string): string | null => {
-      const floor = floorOfKey(key);
-
-      return floor !== null &&
-        this.groupedFloors.has(floor) &&
-        !this.isFixed(key)
-        ? floor
-        : null;
-    };
-    const members = new Map<string, { keys: string[]; spots: Point[] }>();
-    const join = (floor: string, keys: string[], at: Point): void => {
-      const group = members.get(floor) ?? { keys: [], spots: [] };
-
-      group.keys.push(...keys);
-      group.spots.push(at);
-      members.set(floor, group);
-    };
-    const marks = laid.marks.filter((mark) => {
-      const floor = grouped(mark.key);
-
-      if (floor === null) return true;
-
-      join(floor, [mark.key], mark.anchor);
-
-      return false;
-    });
-    const bubbles = laid.bubbles.filter((bubble) => {
-      const floor = grouped(bubble.members[0] ?? '');
-
-      if (floor === null) return true;
-
-      join(floor, bubble.members, bubble);
-
-      return false;
-    });
-    const byKey = new Map(
-      [
-        ...laid.marks,
-        ...laid.bubbles.flatMap((bubble) => bubble.host ?? []),
-      ].map((mark) => [mark.key, mark]),
-    );
-    const floorBubbles = [...members].flatMap(
-      ([floor, group]): LaidBubble[] => {
-        const centre = {
-          x:
-            group.spots.reduce((sum, at) => sum + at.x, 0) / group.spots.length,
-          y:
-            group.spots.reduce((sum, at) => sum + at.y, 0) / group.spots.length,
-        };
-
-        const dotted = (key: string): number => {
-          const mark = byKey.get(key);
-
-          return mark && this.isDot(mark) ? 1 : 0;
-        };
-        const keys = [...group.keys].sort((a, b) => dotted(a) - dotted(b));
-
-        return [
-          {
-            key: `bubble:floor:${floor}`,
-            ...this.insideStage(centre, BUBBLE_CLEAR),
-            members: keys,
-            host: byKey.get(keys[0]) ?? null,
-          },
-        ];
-      },
-    );
-
-    return {
-      marks,
-      bubbles: [...bubbles, ...floorBubbles],
-      hidden: laid.hidden,
-    };
+    return this.laidMarks(this.groupedFloors);
   }
 
   private homeOutlines(needed: boolean): Point[][] {
@@ -3161,10 +3131,15 @@ export class EstanzaCard extends LitElement {
     return own(this.marks, key) !== undefined || this.sheet?.key === key;
   }
 
+  private isPassive(key: string): boolean {
+    return this.openings.has(key) && !this.controls.has(key);
+  }
+
   private dominantIcon(members: readonly Control[]): IconName | null {
     const counts = new Map<IconName, number>();
+    const controls = members.filter((control) => !this.isPassive(control.key));
 
-    for (const control of members) {
+    for (const control of controls.length > 0 ? controls : members) {
       const icon = this.iconOfMark(control);
 
       counts.set(icon, (counts.get(icon) ?? 0) + 1);
@@ -3998,6 +3973,9 @@ export class EstanzaCard extends LitElement {
 
         this.markGestures.cancel();
         this.pressedMark = { scope, at };
+
+        if (isSecondaryPress(event)) return;
+
         this.markGestures.down(onScreen(event));
 
         if (event.pointerType !== 'touch') {
@@ -4008,6 +3986,7 @@ export class EstanzaCard extends LitElement {
       },
       move: (event) => this.markGestures.move(onScreen(event)),
       up: (event) => {
+        if (isSecondaryPress(event)) return;
         if (this.markGestures.up(onScreen(event)) === 'tap') {
           this.markTouch =
             event.pointerType === 'touch'
@@ -4500,18 +4479,21 @@ export class EstanzaCard extends LitElement {
     const target = (event.target as Element | null)?.localName;
 
     this.markTouch = null;
+    this.menuPress = isSecondaryPress(event);
     this.pressedBubble =
       (event.target as Element | null)?.closest<HTMLElement>('.bubble')?.dataset
         .key ?? null;
     this.pressedPill = this.pillUnder(event);
     this.markDrag =
+      !this.menuPress &&
       this.view === '3d' &&
       (event.target as Element | null)?.closest('.mark, .bubble, .temp')
         ? { id: event.pointerId, x: event.clientX, y: event.clientY }
         : null;
 
     this.press =
-      target === 'estanza-scene-view' || target === 'estanza-plan-view'
+      !this.menuPress &&
+      (target === 'estanza-scene-view' || target === 'estanza-plan-view')
         ? {
             x: event.clientX,
             y: event.clientY,
@@ -4583,6 +4565,45 @@ export class EstanzaCard extends LitElement {
 
   private onStageMove = (event: PointerEvent): void => {
     this.orbitFromMark(event);
+  };
+
+  private onStageMenu = (event: MouseEvent): void => {
+    const thing = (event.target as Element | null)?.closest(
+      '.mark, .bubble, .temp, .pin',
+    );
+
+    if (!thing || (!this.interactive && !this.preview)) return;
+
+    event.preventDefault();
+
+    if (!this.menuPress) return;
+
+    this.menuPress = false;
+
+    if (thing.matches('.mark')) {
+      this.selectMark('press');
+      this.pressedMark = null;
+
+      return;
+    }
+
+    const pill = thing.matches('.temp')
+      ? this.labels.find((shown) => shown.key === this.pressedPill)
+      : undefined;
+
+    if (!pill) return;
+
+    this.onSceneSelect(
+      new CustomEvent<ScopeSelectDetail>('scope-select', {
+        detail: {
+          scopeType: 'room',
+          scopeId: pill.key,
+          gesture: 'press',
+          x: pill.x,
+          y: pill.y,
+        },
+      }),
+    );
   };
 
   private readPages(): void {
@@ -5177,6 +5198,13 @@ export class EstanzaCard extends LitElement {
     const home = this.homeFloors;
 
     return home ? roomOfPiece(home.document, home.floors, scope) : null;
+  }
+
+  private roomOfMark(scope: SceneScope): string | null {
+    return (
+      this.roomOfPiece(scope) ??
+      roomOfOpening(this.homeFloors?.floors ?? [], scope)
+    );
   }
 
   private bandOf(reading: Reading): Band {
