@@ -1,5 +1,24 @@
 # Estanza 3D Floorplan Card for Home Assistant
 
+## For AI agents
+
+- **Install** through HACS: add `https://github.com/estanza-casa/estanza-card` as a custom repository of type Dashboard and download it. Or by hand: copy `estanza-card.js` from a release to `<config>/www/` and add `/local/estanza-card.js` as a dashboard resource of type `module`.
+- **Configure** with `type: custom:estanza-card` and one of `share_url`, `share_id` or `home_document`. Every other key is optional; see [Configuration](#configuration).
+
+  ```yaml
+  type: custom:estanza-card
+  share_url: https://estanza.casa/share/abc123
+  show_cables: true
+  bindings:
+    - scope: { type: room, id: kitchen }
+      area_id: kitchen
+    - scope: { type: light, id: kitchen-pendant }
+      entity_id: light.kitchen_pendant
+  ```
+
+- **Editor links carry over.** A light or a piece linked to an entity in the Estanza editor arrives linked, a piece with no entity takes its socket's, and a binding in the card wins.
+- Set up and edit your home from your AI: https://estanza.casa/mcp/
+
 A dashboard card that shows your Estanza home in Home Assistant, in 3D or as a floor plan, and brings it to life with your entities.
 
 Turn on the kitchen light and the kitchen in the model lights up, in the colour and brightness the bulb reports. Open the front door and the door in the model swings open. Rooms show their temperature, and a room with motion or presence is outlined. Tap a light, a cover, a lock or a room to control it.
@@ -77,16 +96,21 @@ The visual editor does all of this. You never need to write YAML.
 3. **Pick an entity.** The picker lists only entities that fit, best match first, matched by name and by area. Each row shows the entity's area and live state. For a room you can pick its Home Assistant area: every light in it then drives the room, and its temperature and humidity sensors are found automatically.
 4. **Check the list below the plan.** Linked things are grouped by floor and room. Things not linked yet show a suggested match, and one button links every suggestion at once. It never replaces a link you made.
 
+### Links made in the Estanza editor
+
+A light or a piece of furniture you linked to an entity in the Estanza editor arrives linked in the card, with no setup. A piece with no entity of its own takes the one on the socket it owns. A link set in the card always wins over the one from Estanza. This works with a share link and with a loaded home file.
+
 ## What the card shows
 
-| Scope    | Reads                                                                          | Shows                                                       |
-| -------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------- |
-| `light`  | `light.*`, then `switch.*`                                                     | On and off, in the reported colour and brightness.          |
-| `room`   | Every entity of its area, plus any you list                                    | Its lights follow, and its temperature shows.               |
-| `door`   | `binary_sensor.*` (door, garage door, opening), `cover.*` (door, garage, gate) | The door swings open, part way for a cover with a position. |
-| `prop`   | `climate.*`, then a temperature `sensor.*`                                     | Its temperature shows on its room, if the room has none.    |
-| `window` | `binary_sensor.*` (window), then `cover.*`                                     | The sashes open, part way for a cover with a position.      |
+| Scope    | Reads                                                                          | Shows                                                         |
+| -------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------- |
+| `light`  | `light.*`, then `switch.*`                                                     | On and off, in the reported colour and brightness.            |
+| `room`   | Every entity of its area, plus any you list                                    | Its lights follow, and its temperature shows.                 |
+| `door`   | `binary_sensor.*` (door, garage door, opening), `cover.*` (door, garage, gate) | The door swings open, part way for a cover with a position.   |
+| `prop`   | Any entity; `climate.*`, then a temperature `sensor.*` for temperature         | A mark, and its temperature on its room if the room has none. |
+| `window` | `binary_sensor.*` (window), then `cover.*`                                     | The sashes open, part way for a cover with a position.        |
 
+- A 3D model you uploaded to Estanza is drawn from your share link. Until it arrives, and in a home loaded from a file, it shows as a plain box of its size.
 - A door with no linked entity is drawn closed.
 - An `unavailable` entity leaves its thing dark and drawn faint.
 - A light with a colour uses it. A light with only a colour temperature uses the nearest warm, neutral or cool white. A lit lamp spills its colour on the floor and walls.
@@ -127,10 +151,13 @@ A critical alert turns its room red, adds a pin and a banner, and moves the card
 
 Every action goes through Home Assistant in your browser, with your own login. Nothing reaches Estanza.
 
-| Gesture | Light or switch                    | Cover                       | Lock                                        | Room                 |
-| ------- | ---------------------------------- | --------------------------- | ------------------------------------------- | -------------------- |
-| Tap     | Toggles it                         | `cover.toggle`              | Asks you to tap again within 4 s to confirm | Opens the room sheet |
-| Hold    | Brightness, power, whites and more | Position, open, stop, close | Home Assistant's own dialog                 | The same room sheet  |
+| Gesture | Light or switch                    | Cover                       | Lock                                        | Room                 | Any other device            |
+| ------- | ---------------------------------- | --------------------------- | ------------------------------------------- | -------------------- | --------------------------- |
+| Tap     | Toggles it                         | `cover.toggle`              | Asks you to tap again within 4 s to confirm | Opens the room sheet | Home Assistant's own dialog |
+| Hold    | Brightness, power, whites and more | Position, open, stop, close | Home Assistant's own dialog                 | The same room sheet  | Nothing                     |
+
+- **Any other device** is anything linked to a light or a piece of furniture that the card cannot switch itself: a media player, a thermostat, a fan, a camera, a sensor, a vacuum, a scene or a script. It gets a mark with its own icon, and a tap opens Home Assistant's dialog for it, which holds that device's own controls. Its state shows in the room sheet.
+- A piece linked only to a thermostat or a temperature sensor gets no mark when its room already shows a temperature. Its reading is in the room's pill, and the room sheet lists it.
 
 - The room sheet has one switch for all the room's lights, its temperature and humidity, and its devices, doors and windows.
 - The thing changes at once. If Home Assistant refuses the call or does not confirm it within 5 seconds, it goes back and a message offers to try again.
@@ -151,6 +178,7 @@ In the editor, open a linked thing's picker and set **On tap** and **On hold**. 
 | Cover         | Open or close, open, close; on hold, also show controls |
 | Lock          | Lock or unlock, lock, unlock, always with a confirm tap |
 | Room          | Show the room, turn its lights on or off                |
+| Other device  | Show details by default, or nothing                     |
 | Sensor only   | None, only details or nothing                           |
 
 In YAML the editor writes Home Assistant's usual action format:
@@ -167,7 +195,106 @@ In YAML the editor writes Home Assistant's usual action format:
     action: more-info
 ```
 
-`action` is `toggle`, `more-info`, `none` or `perform-action`. `perform-action` accepts `cover.open_cover`, `cover.close_cover`, `lock.lock` or `lock.unlock`, only on the thing's own entities. An action the thing cannot do falls back to its default.
+An action the thing cannot do falls back to its default. An action type the card does not know does nothing.
+
+### Every Home Assistant action
+
+A binding takes `tap_action`, `hold_action` and `double_tap_action`, in the same format as Home Assistant's own cards. The card hands every action it does not run itself to Home Assistant's own action handler, so they behave exactly as they do on a core card. The editor shows an action it has no choice for as **Set in YAML** and leaves it alone.
+
+`toggle` switches the thing, as a plain tap does.
+
+```yaml
+tap_action:
+  action: toggle
+```
+
+`more-info` opens Home Assistant's dialog for the thing, or for `entity` when you set one.
+
+```yaml
+tap_action:
+  action: more-info
+  entity: camera.front_door
+```
+
+`perform-action` runs any action with its `data` and `target`. With no `data` or `target`, `cover.open_cover`, `cover.close_cover`, `lock.lock` and `lock.unlock` act on the thing's own entity and show their progress on the mark.
+
+```yaml
+tap_action:
+  action: perform-action
+  perform_action: climate.set_temperature
+  target:
+    entity_id: climate.living_room
+  data:
+    temperature: 21
+```
+
+`navigate` opens another dashboard or panel. `navigation_replace: true` replaces the page in the browser history.
+
+```yaml
+tap_action:
+  action: navigate
+  navigation_path: /lovelace/kitchen
+  navigation_replace: false
+```
+
+`url` opens a link in a new tab.
+
+```yaml
+tap_action:
+  action: url
+  url_path: https://www.home-assistant.io
+```
+
+`assist` opens Assist, with the pipeline you name.
+
+```yaml
+hold_action:
+  action: assist
+  pipeline_id: last_used
+  start_listening: true
+```
+
+`fire-dom-event` sends an `ll-custom` event that carries the whole action. Popup tools such as [browser_mod](https://github.com/thomasloven/hass-browser_mod) listen for it, so a tap can open any card in a popup, a camera feed or your fridge's own card:
+
+```yaml
+tap_action:
+  action: fire-dom-event
+  browser_mod:
+    service: browser_mod.popup
+    data:
+      title: Front door
+      content:
+        type: picture-entity
+        entity: camera.front_door
+```
+
+`none` does nothing.
+
+```yaml
+hold_action:
+  action: none
+```
+
+`double_tap_action` takes any of these. A thing with one waits a quarter of a second after a tap for a second tap. A thing without one acts on the first tap at once.
+
+```yaml
+double_tap_action:
+  action: navigate
+  navigation_path: /lovelace/cameras
+```
+
+`confirmation` works on any action and opens Home Assistant's own dialog. `true` asks whether to run the action, `text` sets the question, `title`, `confirm_text` and `dismiss_text` label the dialog, and `exemptions` lists the users who are never asked.
+
+```yaml
+tap_action:
+  action: toggle
+  confirmation:
+    text: Turn off the freezer?
+    exemptions:
+      - user: 0123456789abcdef0123456789abcdef
+```
+
+A lock or a garage door with `confirmation` asks in this dialog instead of waiting for a second tap. An action Home Assistant runs does not show its progress on the mark.
 
 ## Wall tablet
 
@@ -226,6 +353,7 @@ registry_ids:
 | `comfort_min`      | 18 °C                      | Lowest comfortable temperature, in your unit.                                                     |
 | `comfort_max`      | 26 °C                      | Highest comfortable temperature, in your unit.                                                    |
 | `temperature_tint` | `false`                    | Tint cold rooms navy and hot rooms red.                                                           |
+| `show_cables`      | `false`                    | Draw cable runs, their lengths and their endpoints on the 2D plan.                                |
 | `default_view`     | `3d`                       | `3d` opens on the house, `2d` on the floor plan.                                                  |
 | `tablet`           | `auto`                     | Wall tablet layout: `auto` in a Panel view, `on` always, `off` never.                             |
 | `idle_seconds`     | 45                         | Seconds without a touch before a wall tablet returns to its start view.                           |
@@ -241,19 +369,20 @@ A card with no home shows "No home configured" until you add one.
 
 Each binding links one thing in the home to one or more entities.
 
-| Key                     | Meaning                                                                       |
-| ----------------------- | ----------------------------------------------------------------------------- |
-| `scope.type`            | `light`, `room`, `door`, `prop` (an object such as a thermostat) or `window`. |
-| `scope.id`              | The thing's id in the Estanza home.                                           |
-| `area_id`               | Link every entity of a Home Assistant area. The usual form for a room.        |
-| `entity_id`             | Link one entity.                                                              |
-| `entity_ids`            | Link several entities.                                                        |
-| `temperature_entity_id` | The room's thermometer, when the automatic choice is wrong.                   |
-| `humidity_entity_id`    | The room's hygrometer, when the automatic choice is wrong.                    |
-| `tap_action`            | What a tap does. See [Tap to control](#tap-to-control).                       |
-| `hold_action`           | What a hold does.                                                             |
+| Key                     | Meaning                                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------------------- |
+| `scope.type`            | `light`, `room`, `door`, `prop` (an object such as a thermostat) or `window`.            |
+| `scope.id`              | The thing's id in the Estanza home.                                                      |
+| `area_id`               | Link every entity of a Home Assistant area. The usual form for a room.                   |
+| `entity_id`             | Link one entity.                                                                         |
+| `entity_ids`            | Link several entities.                                                                   |
+| `temperature_entity_id` | The room's thermometer, when the automatic choice is wrong.                              |
+| `humidity_entity_id`    | The room's hygrometer, when the automatic choice is wrong.                               |
+| `tap_action`            | What a tap does. See [Tap to control](#tap-to-control).                                  |
+| `hold_action`           | What a hold does.                                                                        |
+| `double_tap_action`     | What a double tap does. See [Every Home Assistant action](#every-home-assistant-action). |
 
-A binding needs `area_id`, `entity_id` or `entity_ids`. Bindings on the same thing are merged. A binding on a light wins over the binding on its room.
+A binding needs `area_id`, `entity_id` or `entity_ids`. Bindings on the same thing are merged. A binding on a light wins over the binding on its room. A thing with no binding here uses the entity linked to it in the Estanza editor, if any. A device whose tap and hold both do nothing has no mark, so `tap_action: { action: none }` hides it.
 
 A room takes its temperature from `temperature_entity_id` first, then a temperature sensor among its own entities, then the one its area names, then the first one in its area. Humidity works the same way. Set these two keys in YAML; the editor keeps them.
 
@@ -265,7 +394,7 @@ The editor stores each linked entity's registry id in `registry_ids`. If you ren
 
 Your entities, their states and your Home Assistant login never leave your browser. The card reads them from Home Assistant and draws them locally.
 
-**With a share link**, the card fetches your home's geometry from `GET /v1/integrations/home-assistant/<token>` on the Estanza API. The request carries the token and the card version (in an `X-Estanza-Card` header), nothing else. No entity, area or state is ever sent. The card checks again every 5 minutes and when the page comes back into view, using an `ETag`, so an unchanged home costs almost nothing. It never checks while the page is hidden. Estanza counts card loads per home per day, with the country the request came from. Your IP address is never stored.
+**With a share link**, the card fetches your home's geometry from `GET /v1/integrations/home-assistant/<token>` on the Estanza API. The request carries the token and the card version (in an `X-Estanza-Card` header), nothing else. No entity, area or state is ever sent. The card checks again every 5 minutes and when the page comes back into view, using an `ETag`, so an unchanged home costs almost nothing. It never checks while the page is hidden. A 3D model you uploaded is fetched from `GET /v1/integrations/home-assistant/<token>/models/<id>`, with no cookie. Estanza counts card loads per home per day, with the country the request came from. Your IP address is never stored.
 
 **With a pasted home file** (`home_document`), the card sends no request to Estanza at all.
 

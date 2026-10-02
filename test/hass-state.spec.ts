@@ -281,6 +281,15 @@ describe('readClimate', () => {
 
     expect(reading?.entityId).toBe('climate.bedroom_radiator');
   });
+
+  it('never reads a sensor that measures something other than temperature', () => {
+    expect(readClimate(statesOf(['sensor.kitchen_power']))).toBeNull();
+    expect(
+      readClimate(
+        statesOf(['sensor.kitchen_power', 'sensor.bedroom_thermometer']),
+      )?.entityId,
+    ).toBe('sensor.bedroom_thermometer');
+  });
 });
 
 describe('readArea', () => {

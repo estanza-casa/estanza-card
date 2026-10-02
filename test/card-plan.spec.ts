@@ -842,6 +842,20 @@ describe('the remembered view', () => {
   });
 });
 
+describe('cables on the plan', () => {
+  it('leaves cables off the plan by default', async () => {
+    const card = await mountCard({ default_view: '2d' });
+
+    expect(planOf(card)?.cables).toBe(false);
+  });
+
+  it('draws cables on the plan when show_cables is on', async () => {
+    const card = await mountCard({ default_view: '2d', show_cables: true });
+
+    expect(planOf(card)?.cables).toBe(true);
+  });
+});
+
 describe('the floor stack in the plan', () => {
   it('draws every storey for all floors, and says so', async () => {
     const card = await mountCard();

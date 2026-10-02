@@ -13,7 +13,7 @@ import { createMockHass, mockLight } from './mock-hass.js';
 type Size = { width: number; height: number };
 
 const PAINT_CAP = 40;
-const SETTLE_BUDGET_MS = 3000;
+const ATTEMPT_CAP = 20;
 const SPEC_TIMEOUT_MS = 60_000;
 const SHEET = { width: 272, height: 480 };
 
@@ -25,6 +25,7 @@ const bindings: SceneBinding[] = rooms.map((room) => ({
 
 let stage: Size = { width: 700, height: 706 };
 let paints = 0;
+let attempts = 0;
 
 function fakeContext(): CanvasRenderingContext2D {
   const store: Record<string | symbol, unknown> = {
@@ -137,14 +138,13 @@ async function tapRoom(
 }
 
 async function timed(card: EstanzaCard, act: () => Promise<void>) {
-  const started = performance.now();
-
   paints = 0;
+  attempts = 0;
   await act();
   await wait(card, VIEW_SWITCH_MS * 2);
   await wait(card, 200);
 
-  return { ms: performance.now() - started, paints };
+  return { attempts, paints };
 }
 
 beforeEach(() => {
@@ -195,6 +195,8 @@ beforeEach(() => {
     },
     'paint',
   ).mockImplementation(function (this: EstanzaPlanView, ...args: unknown[]) {
+    attempts += 1;
+
     if (paints >= PAINT_CAP) return false;
 
     const drawn = paint.apply(this, args);
@@ -231,7 +233,7 @@ describe('opening a sheet on all floors', () => {
 
         expect(card.shadowRoot?.querySelector('.sheet')).toBeTruthy();
         expect(run.paints).toBeLessThan(8);
-        expect(run.ms).toBeLessThan(SETTLE_BUDGET_MS);
+        expect(run.attempts).toBeLessThan(ATTEMPT_CAP);
       },
       SPEC_TIMEOUT_MS,
     );
@@ -252,7 +254,7 @@ describe('opening a sheet on all floors', () => {
 
       expect(card.shadowRoot?.querySelector('.sheet')).toBeTruthy();
       expect(run.paints).toBeLessThan(8);
-      expect(run.ms).toBeLessThan(SETTLE_BUDGET_MS);
+      expect(run.attempts).toBeLessThan(ATTEMPT_CAP);
     },
     SPEC_TIMEOUT_MS,
   );
@@ -274,7 +276,7 @@ describe('opening a sheet on all floors', () => {
       });
 
       expect(run.paints).toBeLessThan(8);
-      expect(run.ms).toBeLessThan(SETTLE_BUDGET_MS);
+      expect(run.attempts).toBeLessThan(ATTEMPT_CAP);
     },
     SPEC_TIMEOUT_MS,
   );

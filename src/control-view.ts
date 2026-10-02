@@ -21,9 +21,13 @@ import {
 } from './control.js';
 import type { Point } from './gesture.js';
 import {
+  deviceClassOf,
+  entityDomain,
   type HassEntityState,
+  humidityDeviceClass,
   lightColorPresets,
   type ScopeState,
+  temperatureDeviceClass,
 } from './hass-state.js';
 import { icon, type IconName, scopeIcons } from './icons.js';
 import type { LabelSize, Theme } from './living.js';
@@ -780,9 +784,39 @@ export function markIcon(
 
   if (control.kind === 'cover') return 'blinds';
   if (control.kind === 'switch') return 'power';
+  if (control.kind === 'gadget') return deviceIcon(control);
   if (control.kind === 'sensor') return scopeIcons[control.scope.type];
 
   return 'lightbulb';
+}
+
+const domainIcons: Record<string, IconName> = {
+  media_player: 'tv',
+  climate: 'thermometer',
+  fan: 'fan',
+  camera: 'camera',
+  binary_sensor: 'activity',
+  vacuum: 'vacuum',
+  scene: 'sparkles',
+  script: 'sparkles',
+};
+
+function deviceIcon(control: Control): IconName {
+  const state = control.states[0];
+  const domain = entityDomain(control.entityIds[0] ?? '');
+  const deviceClass = state ? deviceClassOf(state) : null;
+
+  if (domain === 'media_player' && deviceClass === 'speaker') return 'speaker';
+  if (domain === 'sensor') {
+    if (deviceClass === temperatureDeviceClass) return 'thermometer';
+    if (deviceClass === humidityDeviceClass) return 'droplet';
+
+    return 'gauge';
+  }
+
+  return Object.hasOwn(domainIcons, domain)
+    ? domainIcons[domain]
+    : scopeIcons.prop;
 }
 
 export function doorIcon(

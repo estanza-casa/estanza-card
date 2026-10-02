@@ -50,12 +50,14 @@ import {
 } from './alerts.js';
 import {
   actionsFor,
+  type ActionTrigger,
   cardTag,
   cardType,
   DEFAULT_NIGHT,
   DEFAULT_OTHER_FLOORS,
   defaultApiOrigin,
   defaultModelsOrigin,
+  documentBindings,
   type EstanzaCardConfig,
   type NightSource,
   parseCardConfig,
@@ -63,6 +65,8 @@ import {
   type SceneScope,
   scopeKey,
   shareIdFromConfig,
+  type ThingAction,
+  type ThingActions,
   type View,
 } from './bindings.js';
 import {
@@ -167,6 +171,12 @@ import {
   TARGET_RADIUS_PX,
 } from './gesture.js';
 import {
+  askHass,
+  DOUBLE_TAP_MS,
+  goesToHass,
+  waitsForDoubleTap,
+} from './hass-action.js';
+import {
   entityDomain,
   type HassEntityState,
   type HomeAssistant,
@@ -175,6 +185,7 @@ import {
   lightColorPresets,
   lightOverlay,
   mapScopeStates,
+  readsTemperatureOnly,
   sceneOverlayOf,
   type ScopeState,
   type ScopeStateMap,
@@ -402,6 +413,7 @@ type PlanProps = Pick<
   | 'selected'
   | 'page'
   | 'dim'
+  | 'cables'
 > & { home: HomeDocument };
 
 type LeftPlan = {
@@ -1001,6 +1013,8 @@ export class EstanzaCard extends LitElement {
 
   private statesWith: Record<string, HassEntityState> | null = null;
 
+  private statesIn: HomeFloors | null = null;
+
   private builtOverlay: SceneOverlay = emptyOverlay();
 
   private overlayFrom: ScopeStateMap | null = null;
@@ -1164,20 +1178,23 @@ export class EstanzaCard extends LitElement {
   get scopeStates(): ScopeStateMap {
     const config = this.liveConfig;
     const hass = this.hass;
+    const home = this.homeFloors;
 
     if (!config || !hass) return {};
 
     if (
       hass !== this.statesFrom ||
       config !== this.statesFor ||
-      this.optimistic !== this.statesWith
+      this.optimistic !== this.statesWith ||
+      home !== this.statesIn
     ) {
       this.statesFrom = hass;
       this.statesFor = config;
       this.statesWith = this.optimistic;
+      this.statesIn = home;
       this.states = mapScopeStates(
         withStates(hass, this.optimistic),
-        config.bindings,
+        documentBindings(home?.document, config.bindings),
       );
     }
 
@@ -1207,6 +1224,7 @@ export class EstanzaCard extends LitElement {
     const controls = new Map<string, Control>();
 
     const bindings = this.config?.bindings ?? [];
+    const warmRooms = new Set(this.readings().keys());
 
     for (const scopeState of Object.values(scopeStates)) {
       const control = controlFor(
@@ -1215,7 +1233,14 @@ export class EstanzaCard extends LitElement {
         names.get(scopeKey(scopeState.scope)) ?? null,
       );
 
-      if (control) controls.set(control.key, control);
+      if (!control) continue;
+      if (control.kind === 'gadget' && readsTemperatureOnly(scopeState)) {
+        const room = this.roomOfThing(scopeState);
+
+        if (room && warmRooms.has(room)) continue;
+      }
+
+      controls.set(control.key, control);
     }
 
     this.controlsFrom = scopeStates;
@@ -2370,6 +2395,7 @@ export class EstanzaCard extends LitElement {
       .selected=${plan.selected}
       .page=${plan.page}
       ?dim=${plan.dim}
+      ?cables=${plan.cables}
       @scope-select=${this.onSceneSelect}
       @view-change=${this.onViewChange}
       @page-change=${this.onPageChange}
@@ -2405,6 +2431,7 @@ export class EstanzaCard extends LitElement {
       selected: this.pickedRoom,
       page: this.planPage,
       dim: this.lateNight,
+      cables: this.config?.show_cables === true,
     };
   }
 
@@ -3901,15 +3928,67 @@ export class EstanzaCard extends LitElement {
     if (!this.interactive || this.reframing) return;
 
     const key = `${scopeType}:${scopeId}`;
-    const control = this.controls.get(key);
+    const at = { x, y };
+    const actions = this.actionsOf(key);
 
-    if (!control) {
-      this.showReadOnly(key);
+    if (gesture === 'press') {
+      this.act(key, 'hold', actions.hold, at);
 
       return;
     }
 
-    const at = { x, y };
+    if (!waitsForDoubleTap(actions.double_tap)) {
+      this.act(key, 'tap', actions.tap, at);
+
+      return;
+    }
+
+    const waiting = `double-tap:${key}`;
+
+    if (this.timers.has(waiting)) {
+      this.cancel(waiting);
+      this.act(key, 'double_tap', actions.double_tap, at);
+
+      return;
+    }
+
+    this.later(waiting, DOUBLE_TAP_MS, () =>
+      this.act(key, 'tap', actions.tap, at),
+    );
+  };
+
+  private actionsOf(key: string): ThingActions {
+    const bindings = this.config?.bindings ?? [];
+    const scope = bindings.find((binding) => scopeKey(binding.scope) === key);
+
+    return scope ? actionsFor(bindings, scope.scope) : {};
+  }
+
+  private act(
+    key: string,
+    trigger: ActionTrigger,
+    action: ThingAction | undefined,
+    at: Point,
+  ): void {
+    const control = this.controls.get(key);
+
+    if (action && goesToHass(action)) {
+      this.closeSheet();
+      askHass(
+        this,
+        trigger,
+        action,
+        control?.entityIds ?? this.openings.get(key)?.entityIds ?? [],
+      );
+
+      return;
+    }
+
+    if (!control) {
+      if (trigger !== 'double_tap') this.showReadOnly(key);
+
+      return;
+    }
 
     this.closeSheet();
 
@@ -3919,12 +3998,9 @@ export class EstanzaCard extends LitElement {
       return;
     }
 
-    const trigger = gesture === 'press' ? 'hold' : 'tap';
-    const deed = deedOf(
-      control.kind,
-      trigger,
-      actionsFor(this.config?.bindings ?? [], control.scope)[trigger],
-    );
+    const deed = deedOf(control.kind, trigger, action);
+
+    if (deed === 'none') return;
 
     if (deed === 'sheet') {
       this.openSheet(control.key, at);
@@ -3933,7 +4009,9 @@ export class EstanzaCard extends LitElement {
     }
 
     if (deed === 'more-info') {
-      this.openMoreInfo(control.entityIds[0] ?? '');
+      const named = typeof action?.entity === 'string' ? action.entity : null;
+
+      this.openMoreInfo(named ?? control.entityIds[0] ?? '');
 
       return;
     }
@@ -3941,7 +4019,7 @@ export class EstanzaCard extends LitElement {
     if (!isPlanned(deed)) return;
 
     this.perform(control, deed, at);
-  };
+  }
 
   private get reframing(): boolean {
     const sheet = this.sheet;

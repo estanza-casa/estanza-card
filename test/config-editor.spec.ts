@@ -926,6 +926,42 @@ describe('the other floors in the editor', () => {
   });
 });
 
+describe('the cables choice in the editor', () => {
+  function cableButtons(editor: EstanzaCardEditor): HTMLElement[] {
+    return all(editor, '.cables button');
+  }
+
+  it('offers Hidden and Shown as icon buttons, Hidden by default', async () => {
+    const editor = await createEditor(baseConfig, failToLoad);
+    const buttons = cableButtons(editor);
+
+    expect(find(editor, '.cables').getAttribute('aria-label')).toBe(
+      'Cables on the plan',
+    );
+    expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Hidden',
+      'Shown',
+    ]);
+    expect(buttons.map((button) => text(button))).toEqual(['', '']);
+    expect(
+      buttons.map((button) => button.getAttribute('aria-pressed')),
+    ).toEqual(['true', 'false']);
+  });
+
+  it('stores show_cables when shown, and drops the key when hidden', async () => {
+    const editor = await createEditor(baseConfig, failToLoad);
+    const config = captureConfig(editor);
+    const [hidden, shown] = cableButtons(editor);
+
+    await click(editor, shown);
+    expect(parseCardConfig(config()).show_cables).toBe(true);
+    expect(shown.getAttribute('aria-pressed')).toBe('true');
+
+    await click(editor, hidden);
+    expect(config().show_cables).toBeUndefined();
+  });
+});
+
 describe('linking from the preview', () => {
   it('draws the home as the picker, with every thing tappable', async () => {
     const editor = await withHome();
@@ -1186,6 +1222,44 @@ describe('linking from the preview', () => {
 
     expect(config().bindings).toEqual([
       { scope: hallLight, entity_id: 'light.hall_spots' },
+    ]);
+  });
+
+  it('keeps an action set in YAML when the other one changes', async () => {
+    const hallLight: SceneScope = { type: 'light', id: 'hall-light' };
+    const popup = {
+      action: 'fire-dom-event',
+      browser_mod: { service: 'browser_mod.popup' },
+    };
+    const editor = await withHome({
+      ...baseConfig,
+      bindings: [
+        {
+          scope: hallLight,
+          entity_id: 'light.hall_spots',
+          tap_action: popup,
+          double_tap_action: { action: 'assist' },
+        },
+      ],
+    });
+    const config = captureConfig(editor);
+
+    await tapInPreview(editor, hallLight);
+
+    const form = find<HaForm>(editor, '.picker .actions ha-form');
+
+    expect(form.data).toEqual({ tap_action: 'yaml', hold_action: 'sheet' });
+
+    change(form, { tap_action: 'yaml', hold_action: 'more-info' });
+
+    expect(config().bindings).toEqual([
+      {
+        scope: hallLight,
+        entity_id: 'light.hall_spots',
+        tap_action: popup,
+        double_tap_action: { action: 'assist' },
+        hold_action: { action: 'more-info' },
+      },
     ]);
   });
 

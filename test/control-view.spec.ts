@@ -4,13 +4,19 @@ import { describe, expect, it } from 'vitest';
 import { type Control, LOCK_CONFIRM_MS } from '../src/control.js';
 import {
   controlStyles,
+  markIcon,
   type MarkPhase,
   markTemplate,
   type OpeningLook,
   sheetTemplate,
 } from '../src/control-view.js';
 import { icon, type IconName } from '../src/icons.js';
-import { mockCover, mockLock, mockSwitch } from './mock-hass.js';
+import {
+  mockCover,
+  mockEntityState,
+  mockLock,
+  mockSwitch,
+} from './mock-hass.js';
 
 function plug(on: boolean): Control {
   return {
@@ -351,5 +357,73 @@ describe('the sheet of a plug', () => {
     expect(rules).toMatch(
       /\[data-tone='accent'\] \.lamp-icon \{[^}]*background: var\(--ez-accent\)/,
     );
+  });
+});
+
+describe('the mark of a linked device', () => {
+  function device(
+    entityId: string,
+    attributes: Record<string, unknown> = {},
+  ): Control {
+    return {
+      kind: 'gadget',
+      key: 'prop:thing',
+      scope: { type: 'prop', id: 'thing' },
+      entityIds: [entityId],
+      states: [mockEntityState(entityId, 'on', attributes)],
+      name: 'Thing',
+      unavailable: false,
+    };
+  }
+
+  it('draws what the device is', () => {
+    const icons = [
+      device('media_player.tv'),
+      device('media_player.kitchen', { device_class: 'speaker' }),
+      device('climate.radiator'),
+      device('fan.ceiling'),
+      device('camera.porch'),
+      device('sensor.lounge', { device_class: 'temperature' }),
+      device('sensor.bath', { device_class: 'humidity' }),
+      device('sensor.power', { device_class: 'power' }),
+      device('binary_sensor.motion', { device_class: 'motion' }),
+      device('vacuum.robot'),
+      device('scene.evening'),
+      device('script.movie_night'),
+      device('water_heater.boiler'),
+    ].map((control) => markIcon(control, false, null));
+
+    expect(icons).toEqual([
+      'tv',
+      'speaker',
+      'thermometer',
+      'fan',
+      'camera',
+      'thermometer',
+      'droplet',
+      'gauge',
+      'activity',
+      'vacuum',
+      'sparkles',
+      'sparkles',
+      'box',
+    ]);
+  });
+
+  it('keeps the light icon for a device linked to a lamp', () => {
+    expect(
+      markIcon(
+        { ...device('media_player.tv'), scope: { type: 'light', id: 'l' } },
+        false,
+        null,
+      ),
+    ).toBe('tv');
+    expect(
+      markIcon(
+        { ...device('sensor.lux'), scope: { type: 'light', id: 'l' } },
+        false,
+        null,
+      ),
+    ).toBe('gauge');
   });
 });

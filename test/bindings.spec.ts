@@ -10,6 +10,7 @@ import {
   findBindingsForScope,
   groupBindingsByScope,
   modelsBase,
+  modelSource,
   parseCardConfig,
   scopeKey,
   shareDocumentEndpoint,
@@ -384,19 +385,31 @@ describe('tap and hold actions', () => {
     expect(binding.hold_action).toBeUndefined();
   });
 
-  it('rejects an action or a service the card cannot run', () => {
-    expect(() => bindingWith({ tap_action: { action: 'navigate' } })).toThrow(
-      /tap_action/,
-    );
-    expect(() =>
-      bindingWith({
-        hold_action: {
-          action: 'perform-action',
-          perform_action: 'script.party',
-        },
-      }),
-    ).toThrow(/hold_action/);
+  it('keeps any Home Assistant action as written, unknown ones included', () => {
+    const popup = {
+      action: 'fire-dom-event',
+      browser_mod: { service: 'browser_mod.popup', data: { title: 'Door' } },
+      confirmation: { text: 'Open it?' },
+    };
+    const binding = bindingWith({
+      tap_action: popup,
+      hold_action: { action: 'teleport', to: 'mars' },
+      double_tap_action: { action: 'navigate', navigation_path: '/energy' },
+    });
+
+    expect(binding.tap_action).toEqual(popup);
+    expect(binding.hold_action).toEqual({ action: 'teleport', to: 'mars' });
+    expect(binding.double_tap_action).toEqual({
+      action: 'navigate',
+      navigation_path: '/energy',
+    });
+  });
+
+  it('rejects an action that is not an action at all', () => {
     expect(() => bindingWith({ tap_action: 'toggle' })).toThrow(/tap_action/);
+    expect(() =>
+      bindingWith({ hold_action: { navigation_path: '/' } }),
+    ).toThrow(/hold_action/);
   });
 
   it('finds the actions of a thing on any of its bindings', () => {
@@ -550,6 +563,25 @@ describe('shareDocumentEndpoint', () => {
     expect(shareDocumentEndpoint(defaultApiOrigin, 'a/b')).toBe(
       'https://api.estanza.casa/v1/integrations/home-assistant/a%2Fb',
     );
+  });
+});
+
+describe('modelSource', () => {
+  it('reads an uploaded model through the share the card reads its home from', () => {
+    const models = modelSource('https://api.estanza.casa/', 'a/b');
+
+    expect(models.url('7c9e6679-7425-40de-944b-e07fc1f90ae7')).toBe(
+      'https://api.estanza.casa/v1/integrations/home-assistant/a%2Fb/models/7c9e6679-7425-40de-944b-e07fc1f90ae7',
+    );
+    expect(models.withCredentials).toBe(false);
+  });
+
+  it('has no address for a model when the home was pasted in without a share', () => {
+    expect(
+      modelSource(defaultApiOrigin, '').url(
+        '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+      ),
+    ).toBeNull();
   });
 });
 

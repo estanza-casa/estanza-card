@@ -1,5 +1,6 @@
 import type { HomeDocument } from '@estanza/plan-engine';
 import { homeDocumentSchema } from '@estanza/plan-engine/document';
+import type { ModelSource } from '@estanza/scene/components/Prop.js';
 import { QUALITY_TIERS, type QualityTier } from '@estanza/scene/quality.js';
 import { spillQualities, type SpillQuality } from '@estanza/scene/spill.js';
 
@@ -62,7 +63,9 @@ export const triggers = ['tap', 'hold'] as const;
 
 export type Trigger = (typeof triggers)[number];
 
-export const plainActions = ['toggle', 'more-info', 'none'] as const;
+export const actionTriggers = ['tap', 'hold', 'double_tap'] as const;
+
+export type ActionTrigger = (typeof actionTriggers)[number];
 
 export const performActions = [
   'cover.open_cover',
@@ -73,11 +76,9 @@ export const performActions = [
 
 export type PerformAction = (typeof performActions)[number];
 
-export type ThingAction =
-  | { action: (typeof plainActions)[number] }
-  | { action: 'perform-action'; perform_action: PerformAction };
+export type ThingAction = { action: string; [key: string]: unknown };
 
-export type ThingActions = Partial<Record<Trigger, ThingAction>>;
+export type ThingActions = Partial<Record<ActionTrigger, ThingAction>>;
 
 export type SceneBinding = {
   scope: SceneScope;
@@ -88,6 +89,7 @@ export type SceneBinding = {
   humidity_entity_id?: string;
   tap_action?: ThingAction;
   hold_action?: ThingAction;
+  double_tap_action?: ThingAction;
 };
 
 export type EstanzaCardConfig = {
@@ -106,6 +108,7 @@ export type EstanzaCardConfig = {
   comfort_min?: number;
   comfort_max?: number;
   temperature_tint?: boolean;
+  show_cables?: boolean;
   tablet?: TabletMode;
   default_view?: View;
   idle_seconds?: number;
@@ -141,17 +144,60 @@ export function findBindingsForScope(
   return bindings.filter((binding) => scopeKey(binding.scope) === key);
 }
 
+export function documentBindings(
+  home: HomeDocument | null | undefined,
+  bindings: SceneBinding[],
+): SceneBinding[] {
+  if (!home) return bindings;
+
+  const bound = new Set(bindings.map((binding) => scopeKey(binding.scope)));
+  const sockets = new Map<string, string>();
+
+  for (const end of home.additions.cableEndpoints ?? []) {
+    if (end.owner && end.entity && !sockets.has(end.owner)) {
+      sockets.set(end.owner, end.entity);
+    }
+  }
+
+  const pieces = [
+    ...home.additions.lights.map((piece) => ({
+      type: 'light' as const,
+      piece,
+    })),
+    ...home.additions.props.map((piece) => ({ type: 'prop' as const, piece })),
+  ];
+  const linked = pieces.flatMap(({ type, piece }): SceneBinding[] => {
+    const scope = { type, id: piece.slug };
+    const entityId = piece.entity ?? sockets.get(piece.slug);
+
+    if (!entityId || !isEntityId(entityId) || bound.has(scopeKey(scope))) {
+      return [];
+    }
+
+    return [{ scope, entity_id: entityId }];
+  });
+
+  return linked.length > 0 ? [...bindings, ...linked] : bindings;
+}
+
+function isEntityId(value: string): boolean {
+  return /^[a-z_]+\.[a-z0-9_]+$/.test(value);
+}
+
 export function actionsFor(
   bindings: SceneBinding[],
   scope: SceneScope,
 ): ThingActions {
   const own = findBindingsForScope(bindings, scope);
   const actions: ThingActions = {};
-  const tap = own.find((binding) => binding.tap_action)?.tap_action;
-  const hold = own.find((binding) => binding.hold_action)?.hold_action;
 
-  if (tap) actions.tap = tap;
-  if (hold) actions.hold = hold;
+  for (const trigger of actionTriggers) {
+    const action = own.find((binding) => binding[`${trigger}_action`])?.[
+      `${trigger}_action`
+    ];
+
+    if (action) actions[trigger] = action;
+  }
 
   return actions;
 }
@@ -176,6 +222,16 @@ export function shareDocumentEndpoint(origin: string, token: string): string {
   const base = origin.replace(/\/+$/, '');
 
   return `${base}/v1/integrations/home-assistant/${encodeURIComponent(token)}`;
+}
+
+export function modelSource(origin: string, shareId: string): ModelSource {
+  return {
+    url: (modelId) =>
+      shareId
+        ? `${shareDocumentEndpoint(origin, shareId)}/models/${encodeURIComponent(modelId)}`
+        : null,
+    withCredentials: false,
+  };
 }
 
 export function modelsBase(origin: string): string {
@@ -244,6 +300,7 @@ export function parseCardConfig(input: unknown): EstanzaCardConfig {
     comfort_min: comfortMin,
     comfort_max: comfortMax,
     temperature_tint: optionalBoolean(raw.temperature_tint, 'temperature_tint'),
+    show_cables: optionalBoolean(raw.show_cables, 'show_cables'),
     tablet: optionalChoice(onOff(raw.tablet), tabletModes, 'tablet'),
     default_view: optionalChoice(raw.default_view, views, 'default_view'),
     idle_seconds: optionalSeconds(raw.idle_seconds, 'idle_seconds'),
@@ -418,6 +475,10 @@ function parseBinding(input: unknown, index: number): SceneBinding {
     ),
     tap_action: parseAction(raw.tap_action, `binding ${index} tap_action`),
     hold_action: parseAction(raw.hold_action, `binding ${index} hold_action`),
+    double_tap_action: parseAction(
+      raw.double_tap_action,
+      `binding ${index} double_tap_action`,
+    ),
   };
 
   if (bindingEntityIds(binding).length === 0 && !binding.area_id) {
@@ -433,24 +494,14 @@ function parseAction(input: unknown, field: string): ThingAction | undefined {
   if (input === undefined || input === null) return undefined;
 
   const raw = asRecord(input);
-  const action = raw?.action;
 
-  if ((plainActions as readonly unknown[]).includes(action)) {
-    return { action: action as (typeof plainActions)[number] };
+  if (!raw || typeof raw.action !== 'string') {
+    throw new Error(
+      `estanza-card: ${field} must be an action, such as { action: more-info }`,
+    );
   }
 
-  const service = raw?.perform_action;
-
-  if (
-    action === 'perform-action' &&
-    (performActions as readonly unknown[]).includes(service)
-  ) {
-    return { action, perform_action: service as PerformAction };
-  }
-
-  throw new Error(
-    `estanza-card: ${field} must be ${plainActions.join(', ')}, or perform-action with one of ${performActions.join(', ')}`,
-  );
+  return { ...raw, action: raw.action };
 }
 
 function parseScope(input: unknown, index: number): SceneScope {

@@ -207,6 +207,20 @@ export function measures(
   );
 }
 
+export function readsTemperatureOnly(scopeState: ScopeState): boolean {
+  const { entityIds, states } = scopeState;
+
+  return (
+    entityIds.length > 0 &&
+    states.length === entityIds.length &&
+    states.every(
+      (state) =>
+        entityDomain(state.entity_id) === 'climate' ||
+        measures(state, temperatureDeviceClass, temperatureUnits),
+    )
+  );
+}
+
 export function areaIdOfEntity(
   hass: HomeAssistant,
   entry: HassEntityRegistryEntry,
@@ -317,7 +331,11 @@ export function readOpening(
 
 export function readClimate(states: HassEntityState[]): ClimateReading | null {
   const state = pickState(
-    states,
+    states.filter(
+      (candidate) =>
+        entityDomain(candidate.entity_id) === 'climate' ||
+        measures(candidate, temperatureDeviceClass, temperatureUnits),
+    ),
     ['climate', 'sensor'],
     [temperatureDeviceClass],
   );

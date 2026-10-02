@@ -8,6 +8,8 @@ import {
 } from '@estanza/plan-engine/geometry/geometry.js';
 import {
   type CanvasState,
+  drawCable,
+  drawCableEndpoint,
   drawPlan,
   drawProp,
   fitCamera,
@@ -46,7 +48,13 @@ import { threeStoreyHome } from './storeys.js';
 vi.mock('@estanza/plan2d', async (original) => {
   const real = await original<typeof import('@estanza/plan2d')>();
 
-  return { ...real, drawPlan: vi.fn(fakeDraw), drawProp: vi.fn(real.drawProp) };
+  return {
+    ...real,
+    drawPlan: vi.fn(fakeDraw),
+    drawProp: vi.fn(real.drawProp),
+    drawCable: vi.fn(),
+    drawCableEndpoint: vi.fn(),
+  };
 });
 
 const WIDTH = 800;
@@ -3593,5 +3601,69 @@ describe('the paper and the marks of the plan', () => {
       expect(box.y - box.height / 2).toBeGreaterThanOrEqual(0);
       expect(box.y + box.height / 2).toBeLessThanOrEqual(520);
     }
+  });
+});
+
+describe('cable runs', () => {
+  const wired = homeDocumentSchema.parse({
+    ...homeFixture,
+    additions: {
+      ...homeFixture.additions,
+      cableEndpoints: [{ slug: 'rack', kind: 'rack', at: [-200, -150] }],
+      cables: [
+        {
+          slug: 'uplink',
+          type: 'cat6',
+          from: 'rack',
+          points: [
+            [-200, -150, 0],
+            [200, 150, 0],
+          ],
+        },
+      ],
+    },
+  });
+
+  beforeEach(() => {
+    vi.mocked(drawCable).mockClear();
+    vi.mocked(drawCableEndpoint).mockClear();
+  });
+
+  it('leaves cables off the plan unless they are asked for', async () => {
+    await mountPlan((element) => {
+      element.home = wired;
+    });
+
+    expect(drawCable).not.toHaveBeenCalled();
+    expect(drawCableEndpoint).not.toHaveBeenCalled();
+  });
+
+  it('draws each run in its colour and each endpoint when asked', async () => {
+    await mountPlan((element) => {
+      element.home = wired;
+      element.cables = true;
+    });
+
+    expect(vi.mocked(drawCable).mock.calls.at(-1)?.slice(1)).toEqual([
+      '#3f8efc',
+      [
+        [-200, -150, 0],
+        [200, 150, 0],
+      ],
+      false,
+    ]);
+    expect(vi.mocked(drawCableEndpoint).mock.calls.at(-1)?.[1].slug).toBe(
+      'rack',
+    );
+  });
+
+  it('keeps cables off a still plan even when asked for', async () => {
+    await mountPlan((element) => {
+      element.home = wired;
+      element.cables = true;
+      element.still = true;
+    });
+
+    expect(drawCable).not.toHaveBeenCalled();
   });
 });

@@ -45,6 +45,7 @@ import { customElement, property } from 'lit/decorators.js';
 
 import { PIN_HEAD_PX, PIN_STEM_PX } from './alert-view.js';
 import { type SceneScope, scopeKey } from './bindings.js';
+import { drawCableLayer } from './cables.js';
 import {
   clearInsets,
   LENS_EASE_MS,
@@ -526,6 +527,8 @@ export class EstanzaPlanView extends LitElement {
   @property({ type: Boolean }) interactive = true;
 
   @property({ type: Boolean }) still = false;
+
+  @property({ type: Boolean }) cables = false;
 
   @property({ attribute: false }) targets: SceneScope[] = [];
 
@@ -1308,6 +1311,11 @@ export class EstanzaPlanView extends LitElement {
               planGlows(home, this.floors, cell.floor, this.overlay),
               alpha,
             );
+
+            if (this.cables && !this.still) {
+              drawCableLayer(cs, home, this.floors, cell.floor);
+            }
+
             this.drawMarks(cs);
 
             if (!this.still) {

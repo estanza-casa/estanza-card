@@ -1,4 +1,6 @@
 import {
+  type ActionTrigger,
+  actionTriggers,
   type PerformAction,
   type SceneScope,
   scopeKey,
@@ -25,6 +27,15 @@ const NUMERIC_TOLERANCE = 3;
 
 const guardedCoverClasses = ['garage', 'gate', 'door'];
 
+const hassActions = [
+  'navigate',
+  'url',
+  'assist',
+  'fire-dom-event',
+  'perform-action',
+  'call-service',
+];
+
 export const controlKinds = [
   'light',
   'switch',
@@ -32,6 +43,7 @@ export const controlKinds = [
   'lock',
   'room',
   'sensor',
+  'gadget',
 ] as const;
 
 export type ControlKind = (typeof controlKinds)[number];
@@ -61,6 +73,7 @@ const kindDeeds: Record<ControlKind, readonly Deed[]> = {
   lock: ['toggle', 'lock', 'unlock', 'more-info', 'none'],
   room: ['sheet', 'toggle', 'none'],
   sensor: ['none', 'more-info'],
+  gadget: ['more-info', 'none'],
 };
 
 const defaultDeeds: Record<ControlKind, Record<Trigger, Deed>> = {
@@ -70,6 +83,7 @@ const defaultDeeds: Record<ControlKind, Record<Trigger, Deed>> = {
   lock: { tap: 'toggle', hold: 'more-info' },
   room: { tap: 'sheet', hold: 'sheet' },
   sensor: { tap: 'none', hold: 'none' },
+  gadget: { tap: 'more-info', hold: 'none' },
 };
 
 const toggleLabels: Record<ControlKind, string> = {
@@ -79,6 +93,7 @@ const toggleLabels: Record<ControlKind, string> = {
   lock: 'Lock or unlock',
   room: 'Turn its lights on or off',
   sensor: 'Turn on or off',
+  gadget: 'Turn on or off',
 };
 
 const deedLabels: Record<Exclude<Deed, 'toggle'>, string> = {
@@ -134,10 +149,11 @@ export function controlFor(
   homeName: string | null = null,
 ): Control | null {
   const kind = controlKindOf(scopeState.scope, scopeState.entityIds);
-  const answers = (trigger: Trigger) =>
+  const answers = (trigger: ActionTrigger) =>
+    handedToHass(actions[trigger]) ||
     deedOf(kind, trigger, actions[trigger]) !== 'none';
 
-  if (kind === 'sensor' && !answers('tap') && !answers('hold')) return null;
+  if (readOnly(kind) && !actionTriggers.some(answers)) return null;
 
   return markedControl(scopeState, homeName);
 }
@@ -149,12 +165,11 @@ export function markedControl(
   const { scope } = scopeState;
   const kind = controlKindOf(scope, scopeState.entityIds);
   const domains = kind === 'room' ? ['light'] : [kind];
-  const entityIds =
-    kind === 'sensor'
-      ? scopeState.entityIds
-      : scopeState.entityIds.filter((entityId) =>
-          domains.includes(entityDomain(entityId)),
-        );
+  const entityIds = readOnly(kind)
+    ? scopeState.entityIds
+    : scopeState.entityIds.filter((entityId) =>
+        domains.includes(entityDomain(entityId)),
+      );
   const states = scopeState.states.filter((state) =>
     entityIds.includes(state.entity_id),
   );
@@ -431,8 +446,13 @@ export function controlKindOf(
   if (domains.has('cover')) return 'cover';
   if (domains.has('light')) return 'light';
   if (domains.has('switch')) return 'switch';
+  if (scope.type === 'prop' || scope.type === 'light') return 'gadget';
 
   return 'sensor';
+}
+
+function readOnly(kind: ControlKind): boolean {
+  return kind === 'sensor' || kind === 'gadget';
 }
 
 export function defaultDeed(kind: ControlKind, trigger: Trigger): Deed {
@@ -473,18 +493,53 @@ export function actionOf(deed: Deed): ThingAction | undefined {
 
 export function deedOf(
   kind: ControlKind,
-  trigger: Trigger,
+  trigger: ActionTrigger,
   action: ThingAction | undefined,
 ): Deed {
-  const deed = !action
-    ? null
-    : action.action === 'perform-action'
-      ? performedDeeds[action.perform_action]
-      : action.action;
+  if (trigger === 'double_tap') {
+    const deed = action ? cardDeedOf(action) : null;
 
-  return deed && deedChoices(kind, trigger).includes(deed)
+    return deed && deedChoices(kind, 'tap').includes(deed) ? deed : 'none';
+  }
+
+  if (!action) return defaultDeed(kind, trigger);
+
+  const deed = cardDeedOf(action);
+
+  if (!deed) return 'none';
+
+  return deedChoices(kind, trigger).includes(deed)
     ? deed
     : defaultDeed(kind, trigger);
+}
+
+export function cardDeedOf(action: ThingAction): Deed | null {
+  const { action: type } = action;
+
+  if (type === 'toggle' || type === 'more-info' || type === 'none') {
+    return type;
+  }
+
+  if (type !== 'perform-action' && type !== 'call-service') return null;
+
+  const service = action.perform_action ?? action.service;
+  const aimed = ['data', 'service_data', 'target'].some(
+    (field) => action[field] !== undefined,
+  );
+
+  return !aimed &&
+    typeof service === 'string' &&
+    Object.hasOwn(performedDeeds, service)
+    ? performedDeeds[service as PerformAction]
+    : null;
+}
+
+export function handedToHass(action: ThingAction | undefined): boolean {
+  return (
+    action !== undefined &&
+    cardDeedOf(action) === null &&
+    hassActions.includes(action.action)
+  );
 }
 
 export function planDeed(

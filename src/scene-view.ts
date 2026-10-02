@@ -56,6 +56,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import {
   Box3,
   type Camera,
+  LoadingManager,
   MathUtils,
   Matrix4,
   type Mesh,
@@ -73,6 +74,7 @@ import {
   defaultApiOrigin,
   defaultModelsOrigin,
   modelsBase,
+  modelSource,
   type OtherFloors,
   type SceneScope,
   scopeKey,
@@ -191,6 +193,8 @@ export const furnitureNotice = 'Furniture could not be loaded';
 export const REVALIDATE_MS = 5 * 60 * 1000;
 
 const CAMERA = { position: HOME_CAMERA, fov: 50 };
+
+const REFUSED_URL = 'data:,';
 const SWIPE_PX = 48;
 const ORBIT_TOUCHES = { ONE: TOUCH.ROTATE, TWO: TOUCH.DOLLY_PAN };
 const PAGING_TOUCHES = { TWO: TOUCH.DOLLY_ROTATE };
@@ -498,8 +502,23 @@ export function withLoadedProps(
   return { ...home, additions: { ...home.additions, props } };
 }
 
+export function catalogOnly(base: string): LoadingManager {
+  const manager = new LoadingManager();
+
+  manager.setURLModifier((asked) =>
+    asked.startsWith(`${base}/`) || asked.startsWith('blob:')
+      ? asked
+      : REFUSED_URL,
+  );
+
+  return manager;
+}
+
 function ModelLoad({ url }: { url: string }): null {
-  useGLTF(url);
+  // The scene shares one glTF loader and leaves the last load's manager on it.
+  useGLTF(url, false, false, (loader) => {
+    loader.manager = catalogOnly(sceneConfig.modelBase);
+  });
 
   return null;
 }
@@ -2539,6 +2558,7 @@ export class EstanzaSceneView extends LitElement {
           nightGarden: true,
           brightness: overlayBrightness(view.home, this.overlay),
           onFit: this.onFit,
+          models: modelSource(this.apiOrigin, this.shareId),
           labels: (floor: DerivedFloor) => [
             createElement('group', {
               key: 'anchor',

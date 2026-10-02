@@ -123,13 +123,62 @@ describe('what a tap controls', () => {
     ).toBeNull();
   });
 
-  it('leaves a thermostat alone', () => {
+  it('marks a thermostat on a piece, whose tap shows its details', () => {
+    const control = controlOf(createHouseHass(), {
+      scope: { type: 'prop', id: 'radiator' },
+      entity_id: 'climate.bedroom_radiator',
+    });
+
+    expect(control).toMatchObject({
+      kind: 'gadget',
+      entityIds: ['climate.bedroom_radiator'],
+    });
+    expect(control && deedOf(control.kind, 'tap', undefined)).toBe('more-info');
+  });
+
+  it('marks any entity linked to a piece, whatever its domain', () => {
+    const hass = createMockHass({
+      states: [
+        mockEntityState('media_player.living_tv', 'playing'),
+        mockEntityState('vacuum.robot', 'docked'),
+        mockEntityState('script.movie_night', 'off'),
+      ],
+    });
+
+    for (const entityId of [
+      'media_player.living_tv',
+      'vacuum.robot',
+      'script.movie_night',
+    ]) {
+      expect(
+        controlOf(hass, {
+          scope: { type: 'prop', id: 'thing' },
+          entity_id: entityId,
+        }),
+      ).toMatchObject({ kind: 'gadget', entityIds: [entityId] });
+    }
+  });
+
+  it('leaves a linked piece without a mark when its tap and hold do nothing', () => {
+    const hass = createMockHass({
+      states: [mockEntityState('media_player.living_tv', 'playing')],
+    });
+    const scopeState = Object.values(
+      mapScopeStates(hass, [
+        {
+          scope: { type: 'prop', id: 'tv' },
+          entity_id: 'media_player.living_tv',
+        },
+      ]),
+    )[0];
+
+    expect(controlFor(scopeState, { tap: { action: 'none' } })).toBeNull();
     expect(
-      controlOf(createHouseHass(), {
-        scope: { type: 'prop', id: 'radiator' },
-        entity_id: 'climate.bedroom_radiator',
+      controlFor(scopeState, {
+        tap: { action: 'none' },
+        hold: { action: 'more-info' },
       }),
-    ).toBeNull();
+    ).not.toBeNull();
   });
 
   it('marks a control whose entity is unavailable', () => {
@@ -375,6 +424,7 @@ describe('what a tap and a hold do', () => {
       ['lock', 'toggle', 'more-info'],
       ['room', 'sheet', 'sheet'],
       ['sensor', 'none', 'none'],
+      ['gadget', 'more-info', 'none'],
     ]);
   });
 
@@ -406,6 +456,8 @@ describe('what a tap and a hold do', () => {
     ]);
     expect(deedChoices('room', 'tap')).toEqual(['sheet', 'toggle', 'none']);
     expect(deedChoices('sensor', 'tap')).toEqual(['none', 'more-info']);
+    expect(deedChoices('gadget', 'tap')).toEqual(['more-info', 'none']);
+    expect(deedChoices('gadget', 'hold')).toEqual(['none', 'more-info']);
   });
 
   it('says what each choice does in the words of its kind', () => {
@@ -483,6 +535,21 @@ describe('what a tap and a hold do', () => {
       'cover',
     );
     expect(controlKindOf({ type: 'room', id: 'hall' }, [])).toBe('room');
+  });
+
+  it('calls a piece linked to something it cannot switch a device, never a sensor', () => {
+    expect(controlKindOf({ type: 'prop', id: 'tv' }, ['media_player.tv'])).toBe(
+      'gadget',
+    );
+    expect(controlKindOf({ type: 'light', id: 'lamp' }, ['sensor.lux'])).toBe(
+      'gadget',
+    );
+    expect(controlKindOf({ type: 'prop', id: 'tv' }, ['switch.tv_plug'])).toBe(
+      'switch',
+    );
+    expect(controlKindOf({ type: 'window', id: 'w1' }, ['sensor.x'])).toBe(
+      'sensor',
+    );
   });
 
   it('lets a sensor-only door be tapped only when it asks for its details', () => {

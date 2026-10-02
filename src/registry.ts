@@ -260,6 +260,9 @@ function rewriteBinding(
   if (humidity) rewritten.humidity_entity_id = humidity;
   if (binding.tap_action) rewritten.tap_action = binding.tap_action;
   if (binding.hold_action) rewritten.hold_action = binding.hold_action;
+  if (binding.double_tap_action) {
+    rewritten.double_tap_action = binding.double_tap_action;
+  }
 
   const bound =
     rewritten.area_id ?? entityIds[0] ?? temperature ?? humidity ?? null;

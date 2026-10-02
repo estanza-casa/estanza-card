@@ -40,6 +40,8 @@ import {
   scopeKey,
   shareDocumentEndpoint,
   shareIdFromConfig,
+  type ThingAction,
+  type Trigger,
   triggers,
 } from './bindings.js';
 import {
@@ -51,6 +53,7 @@ import {
 } from './card-update.js';
 import {
   actionOf,
+  cardDeedOf,
   type ControlKind,
   controlKindOf,
   deedChoices,
@@ -159,6 +162,8 @@ export type HomeSummary = { name: string; floors: number; rooms: number };
 
 export const highlightEvent = 'estanza-card-highlight';
 
+const SET_IN_YAML = 'yaml';
+
 export const editorLabels: Record<string, string> = {
   share: 'Share link or ID',
   title: 'Card title',
@@ -218,6 +223,13 @@ const nightChoices: Choice<NightSource>[] = [
 const otherFloorsChoices: Choice<OtherFloors>[] = [
   { value: 'ghosted', name: 'Ghosted', glyph: 'layers' },
   { value: 'hidden', name: 'Hidden', glyph: 'layer' },
+];
+
+type CablesShown = 'hidden' | 'shown';
+
+const cablesChoices: Choice<CablesShown>[] = [
+  { value: 'hidden', name: 'Hidden', glyph: 'cable-off' },
+  { value: 'shown', name: 'Shown', glyph: 'cable' },
 ];
 
 const qualityLooks: Record<QualityTier, Omit<Choice<QualityTier>, 'value'>> = {
@@ -1505,7 +1517,7 @@ export class EstanzaCardEditor extends LitElement {
           @value-changed=${this.cardChanged}
         ></ha-form>
         ${this.renderNightSource()} ${this.renderQuality()}
-        ${this.renderOtherFloors()}
+        ${this.renderOtherFloors()} ${this.renderCables()}
       </div>
       <div class="footer">
         ${
@@ -1643,6 +1655,17 @@ export class EstanzaCardEditor extends LitElement {
       choices: otherFloorsChoices,
       chosen: this.config?.other_floors ?? DEFAULT_OTHER_FLOORS,
       onChoose: (mode) => this.chooseOtherFloors(mode),
+    });
+  }
+
+  private renderCables(): TemplateResult {
+    return segmentsTemplate({
+      heading: 'Cables',
+      group: 'cables',
+      label: 'Cables on the plan',
+      choices: cablesChoices,
+      chosen: this.config?.show_cables ? 'shown' : 'hidden',
+      onChoose: (shown) => this.chooseCables(shown),
     });
   }
 
@@ -2092,23 +2115,34 @@ export class EstanzaCardEditor extends LitElement {
   private renderActions(thing: Thing): TemplateResult {
     const kind = this.kindOf(thing);
     const chosen = actionsFor(this.links, thing.scope);
-    const schema = triggers.map((trigger) => ({
-      name: `${trigger}_action`,
-      required: true,
-      selector: {
-        select: {
-          mode: 'dropdown',
-          options: deedChoices(kind, trigger).map((deed, index) => ({
-            value: deed,
-            label: `${deedLabel(kind, deed)}${index === 0 ? ' (default)' : ''}`,
-          })),
+    const schema = triggers.map((trigger) => {
+      const yaml = chosen[trigger];
+      const kept =
+        yaml && !cardDeedOf(yaml)
+          ? [{ value: SET_IN_YAML, label: `Set in YAML: ${yaml.action}` }]
+          : [];
+
+      return {
+        name: `${trigger}_action`,
+        required: true,
+        selector: {
+          select: {
+            mode: 'dropdown',
+            options: [
+              ...kept,
+              ...deedChoices(kind, trigger).map((deed, index) => ({
+                value: deed,
+                label: `${deedLabel(kind, deed)}${index === 0 ? ' (default)' : ''}`,
+              })),
+            ],
+          },
         },
-      },
-    }));
+      };
+    });
     const data = Object.fromEntries(
       triggers.map((trigger) => [
         `${trigger}_action`,
-        deedOf(kind, trigger, chosen[trigger]),
+        shownDeed(kind, trigger, chosen[trigger]),
       ]),
     );
 
@@ -2874,10 +2908,14 @@ export class EstanzaCardEditor extends LitElement {
     if (!thing) return;
 
     const kind = this.kindOf(thing);
+    const chosen = actionsFor(this.links, thing.scope);
     let links = this.links;
 
     for (const trigger of triggers) {
       const wanted = readString(event.detail.value[`${trigger}_action`]);
+
+      if (wanted === shownDeed(kind, trigger, chosen[trigger])) continue;
+
       const deed =
         deedChoices(kind, trigger).find((choice) => choice === wanted) ??
         defaultDeed(kind, trigger);
@@ -3085,6 +3123,17 @@ export class EstanzaCardEditor extends LitElement {
     this.config = {
       ...this.config,
       other_floors: mode === DEFAULT_OTHER_FLOORS ? undefined : mode,
+    };
+
+    this.emit();
+  }
+
+  private chooseCables(shown: CablesShown): void {
+    if (!this.config) return;
+
+    this.config = {
+      ...this.config,
+      show_cables: shown === 'shown' ? true : undefined,
     };
 
     this.emit();
@@ -3429,6 +3478,16 @@ function looksLikeUrl(value: string): boolean {
 
 function plural(count: number, noun: string, nouns = `${noun}s`): string {
   return `${count} ${count === 1 ? noun : nouns}`;
+}
+
+function shownDeed(
+  kind: ControlKind,
+  trigger: Trigger,
+  action: ThingAction | undefined,
+): string {
+  return action && !cardDeedOf(action)
+    ? SET_IN_YAML
+    : deedOf(kind, trigger, action);
 }
 
 function computeLabel(schema: HaFormSchemaEntry): string {
