@@ -84,6 +84,8 @@ type SheetGlide = { from: Lens | null; start: number | null };
 
 type Aim = 'home' | 'overhead' | 'fit' | 'back';
 
+type Optics = Pick<PerspectiveCamera, 'fov' | 'near' | 'far'>;
+
 type Left = {
   pose: Pose;
   rest: Rest;
@@ -129,6 +131,7 @@ type Ease = {
 export const SPOT_PITCH_DEG = 65;
 export const OVERHEAD_PHI = 0.01;
 export const PLAN_THETA = 0;
+export const PLAN_FOV_DEG = 4;
 export const FIT_MARGIN = 1.15;
 export const PORTRAIT_TURN_DEG = 45;
 export const HOUSE_AIR = 0.06;
@@ -676,20 +679,12 @@ export function planLens(
 ): Lens {
   const { width, height } = size;
   const eye = new PerspectiveCamera(fov, width / height, 0.01, 1000);
-  const box = new Box3().setFromPoints([...house]);
-  const top = box.max.y;
-  const ring = [
-    new Vector3(box.min.x, top, box.min.z),
-    new Vector3(box.max.x, top, box.min.z),
-    new Vector3(box.max.x, top, box.max.z),
-    new Vector3(box.min.x, top, box.max.z),
-  ];
 
   eye.position.copy(pose.position);
   eye.lookAt(pose.target);
   eye.updateMatrixWorld();
 
-  const shown = screenBox(ring, eye, size);
+  const shown = screenBox(floorRing(house), eye, size);
   const zoom =
     ((frame.right - frame.left) / (shown.right - shown.left) +
       (frame.bottom - frame.top) / (shown.low - shown.high)) /
@@ -958,14 +953,67 @@ export function spotPose(spot: Spot, home: RigFrame, orbit: number): Pose {
   };
 }
 
-export function overheadPose(home: RigFrame): Pose {
+export function floorRing(house: readonly Vector3[]): Vector3[] {
+  if (house.length === 0) return [];
+
+  const box = new Box3().setFromPoints([...house]);
+  const floor = box.min.y;
+
+  return [
+    new Vector3(box.min.x, floor, box.min.z),
+    new Vector3(box.max.x, floor, box.min.z),
+    new Vector3(box.max.x, floor, box.max.z),
+    new Vector3(box.min.x, floor, box.max.z),
+  ];
+}
+
+export function overheadPose(
+  home: RigFrame,
+  ring: readonly Vector3[] = [],
+): Pose {
+  const target =
+    ring.length > 0
+      ? new Box3().setFromPoints([...ring]).getCenter(new Vector3())
+      : home.center.clone();
   const offset = new Vector3().setFromSpherical(
     new Spherical(home.distance, OVERHEAD_PHI, PLAN_THETA),
   );
 
+  return { target, position: target.clone().add(offset) };
+}
+
+export function planFov(wide: number, flat: number): number {
+  return MathUtils.lerp(wide, Math.min(wide, PLAN_FOV_DEG), flat);
+}
+
+export function dollyOf(wide: number, fov: number): number {
+  const half = (degrees: number): number =>
+    Math.tan(MathUtils.degToRad(degrees) / 2);
+
+  return half(wide) / half(fov);
+}
+
+export function tiltStep(
+  start: number,
+  ms: number,
+  now: number,
+): { value: number; done: boolean } {
+  const progress = ms > 0 ? MathUtils.clamp((now - start) / ms, 0, 1) : 1;
+
   return {
-    target: home.center.clone(),
-    position: home.center.clone().add(offset),
+    value: (1 - Math.cos(Math.PI * progress)) / 2,
+    done: progress === 1,
+  };
+}
+
+function dollied(pose: Pose, dolly: number): Pose {
+  return {
+    target: pose.target.clone(),
+    position: pose.position
+      .clone()
+      .sub(pose.target)
+      .multiplyScalar(dolly)
+      .add(pose.target),
   };
 }
 
@@ -990,8 +1038,9 @@ function aimedPose(
   home: RigFrame,
   camera: PerspectiveCamera,
   least: number,
+  plan: readonly Vector3[],
 ): Pose {
-  if (ease.aim === 'overhead') return overheadPose(home);
+  if (ease.aim === 'overhead') return overheadPose(home, floorRing(plan));
   if (ease.aim === 'fit') return fitPose(home, from, least);
   if (spot && camera.aspect >= 1) return spotPose(spot, home, ease.place.orbit);
 
@@ -1094,6 +1143,12 @@ export class CameraRig {
 
   private shown = false;
 
+  private wide: Optics | null = null;
+
+  private seat: Pose | null = null;
+
+  private dolly = 1;
+
   constructor(
     private readonly onMove: () => void,
     private readonly house: House = () => [],
@@ -1143,6 +1198,10 @@ export class CameraRig {
   }
 
   attach(stage: RigStage): void {
+    const { fov, near, far } = stage.camera;
+
+    if (this.dolly === 1) this.wide = { fov, near, far };
+
     this.stage = stage;
     this.hold(this.held);
 
@@ -1245,7 +1304,7 @@ export class CameraRig {
     if (stage && !this.rising) {
       this.left = {
         pose: {
-          position: stage.camera.position.clone(),
+          position: this.seatOf(stage).position,
           target: stage.controls?.target.clone() ?? stage.frame().center,
         },
         rest: this.rest,
@@ -1440,10 +1499,10 @@ export class CameraRig {
     stage.controls?.dispatchEvent?.({ type: 'start' });
 
     const course = this.chart(ease, stage, now);
-    const { value, done } = glideStep(
-      { from: 0, to: 1, start: course.start, ms: ease.ms },
-      now,
-    );
+    const { value, done } =
+      ease.aim === 'overhead' || this.rising
+        ? tiltStep(course.start, ease.ms, now)
+        : glideStep({ from: 0, to: 1, start: course.start, ms: ease.ms }, now);
 
     this.follow(ease, course, stage, value);
 
@@ -1499,6 +1558,8 @@ export class CameraRig {
       (controls !== null && !finiteVector(controls.target));
 
     if (lost) {
+      this.widen(stage);
+
       const home = stage.frame();
       const pose = homePose(
         home.center,
@@ -1508,6 +1569,7 @@ export class CameraRig {
         this.leastPitch,
       );
 
+      this.seat = null;
       calmControls(controls, camera);
       camera.position.copy(pose.position);
 
@@ -1534,6 +1596,8 @@ export class CameraRig {
   private chart(ease: Ease, stage: RigStage, now: number): Course {
     if (ease.course) return ease.course;
 
+    this.widen(stage);
+
     const { camera, controls } = stage;
     const home = stage.frame();
 
@@ -1554,7 +1618,15 @@ export class CameraRig {
             position: left.pose.position.clone(),
             target: left.pose.target.clone(),
           }
-        : aimedPose(ease, from, spot, home, camera, this.leastPitch),
+        : aimedPose(
+            ease,
+            from,
+            spot,
+            home,
+            camera,
+            this.leastPitch,
+            this.planHouse(),
+          ),
       controls,
     );
 
@@ -1603,6 +1675,7 @@ export class CameraRig {
     const { from, to } = course;
     const pose = blendPose(from, to, value);
 
+    this.widen(stage);
     camera.position.copy(pose.position);
 
     if (controls) {
@@ -1614,6 +1687,10 @@ export class CameraRig {
     }
 
     camera.updateMatrixWorld();
+    this.seat = {
+      position: camera.position.clone(),
+      target: controls?.target.clone() ?? pose.target,
+    };
     this.shift = {
       x: MathUtils.lerp(from.shift.x, ease.place.x, value),
       y: MathUtils.lerp(from.shift.y, ease.place.y, value),
@@ -1773,12 +1850,12 @@ export class CameraRig {
     }
 
     const eye = new PerspectiveCamera(
-      camera.fov,
+      this.wideFov(camera),
       size.width / size.height,
       0.01,
       1000,
     );
-    const at = pose ?? cameraPose(camera);
+    const at = pose ?? this.seatOf(stage);
 
     eye.position.copy(at.position);
     eye.lookAt(at.target);
@@ -1827,12 +1904,17 @@ export class CameraRig {
 
     if (points.length === 0) return plain;
 
+    const wide = this.wideFov(camera);
+    const narrow = planFov(wide, 1);
     const planned =
       rest === 'plan' && this.planFrame
         ? planLens(
             this.planHouse(),
-            pose ?? cameraPose(camera),
-            camera.fov,
+            dollied(
+              pose ?? this.seat ?? this.seatOf(stage),
+              dollyOf(wide, narrow),
+            ),
+            narrow,
             size,
             this.planFrame,
           )
@@ -1842,8 +1924,8 @@ export class CameraRig {
 
     const lens = houseLens(
       points,
-      pose ?? cameraPose(camera),
-      camera.fov,
+      pose ?? this.seatOf(stage),
+      wide,
       size,
       this.clear,
       this.ground(),
@@ -1852,6 +1934,53 @@ export class CameraRig {
     );
 
     return Number.isFinite(lens.zoom) && lens.zoom > 0 ? lens : plain;
+  }
+
+  private wideFov(camera: PerspectiveCamera): number {
+    return this.wide?.fov ?? camera.fov;
+  }
+
+  private seatOf(stage: RigStage): Pose {
+    const seat = this.seat;
+
+    if (this.dolly === 1 || !seat) return cameraPose(stage.camera);
+
+    return { position: seat.position.clone(), target: seat.target.clone() };
+  }
+
+  private widen(stage: RigStage): void {
+    const { wide, seat } = this;
+
+    if (this.dolly === 1 || !wide || !seat) return;
+
+    const { camera, controls } = stage;
+
+    camera.position.copy(seat.position);
+    controls?.target.copy(seat.target);
+    Object.assign(camera, wide);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld();
+    this.dolly = 1;
+  }
+
+  private narrow(camera: PerspectiveCamera): void {
+    const { wide, seat } = this;
+
+    if (!wide || !seat) return;
+
+    const fov = planFov(wide.fov, this.flat);
+    const dolly = dollyOf(wide.fov, fov);
+
+    if (dolly === this.dolly) return;
+
+    const back = (dolly - 1) * seat.position.distanceTo(seat.target);
+
+    camera.position.copy(dollied(seat, dolly).position);
+    camera.fov = fov;
+    camera.near = wide.near + back;
+    camera.far = wide.far + back;
+    camera.updateMatrixWorld();
+    this.dolly = dolly;
   }
 
   private applyView(): void {
@@ -1863,6 +1992,7 @@ export class CameraRig {
     const x = -this.shift.x + this.lens.x;
     const y = -this.shift.y + this.lens.y;
 
+    this.narrow(camera);
     camera.zoom = this.lens.zoom;
 
     if ((x === 0 && y === 0) || size.width === 0 || size.height === 0) {

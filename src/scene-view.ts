@@ -433,6 +433,16 @@ function wallBounds(floor: DerivedFloor): Rect | null {
   };
 }
 
+export function planStoreys<T extends { floor: { id: string } }>(
+  storeys: readonly T[],
+  floor: FloorChoice,
+  laidOut: boolean,
+): T[] {
+  const shown = storeys.filter((storey) => storey.floor.id === floor);
+
+  return laidOut || shown.length === 0 ? [...storeys] : shown;
+}
+
 export function storeyPoints(floor: DerivedFloor, matrix: Matrix4): Vector3[] {
   const walls = floor.floor.walls;
   const top = Math.max(0, ...walls.map((wall) => wall.height));
@@ -2751,7 +2761,12 @@ export class EstanzaSceneView extends LitElement {
   }
 
   private planHouse(): Vector3[] {
-    return this.storeysAt((storey) => ({ at: storey.flat, size: storey.size }));
+    const laidOut = this.pairedCells().length > 0;
+
+    return this.storeysAt(
+      (storey) => ({ at: storey.flat, size: storey.size }),
+      (storeys) => planStoreys(storeys, this.floor, laidOut),
+    );
   }
 
   private drawnHouse(): Vector3[] {
@@ -2763,12 +2778,13 @@ export class EstanzaSceneView extends LitElement {
 
   private storeysAt(
     pose: (storey: StoreySpread) => { at: Vector3; size: number },
+    pick: (storeys: StoreySpread[]) => StoreySpread[] = (storeys) => storeys,
   ): Vector3[] {
     const scene = this.live?.scene;
 
     if (!scene) return [];
 
-    return this.storeySpreads().flatMap((storey) => {
+    return pick(this.storeySpreads()).flatMap((storey) => {
       if (!inScene(storey.anchor, scene)) return [];
 
       storey.anchor.updateWorldMatrix(true, false);

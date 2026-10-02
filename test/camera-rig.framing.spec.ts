@@ -76,6 +76,7 @@ function shoot(
   clear: Rect[],
   ground: Vector3[] = [],
   drawn?: Vector3[],
+  plan?: Vector3[],
 ): Shot {
   const points = Array.isArray(house) ? house : corners(house);
   const camera = new PerspectiveCamera(50, size.width / size.height, 0.1, 400);
@@ -87,7 +88,7 @@ function shoot(
     () => undefined,
     () => points,
     () => ground,
-    undefined,
+    () => plan ?? points,
     () => drawn ?? points,
   );
   const stage: RigStage = {
@@ -527,24 +528,137 @@ describe('the view after a room sheet closes', () => {
 });
 
 describe('the top-down view under the plan', () => {
-  it('lays the tops of the walls over the place the plan draws the house before the plan fades in', () => {
-    const size = { width: 1280, height: 806 };
-    const plan = { left: 220, top: 120, right: 1060, bottom: 680 };
-    const shot = shoot(storey, size, deskControls);
+  const ground = new Box3(new Vector3(-8, 0, -6), new Vector3(8, 2.8, 6));
+  const upper = new Box3(new Vector3(-5, 2.8, -3), new Vector3(3, 5.6, 4));
+  const upperWide = upper.max.x - upper.min.x;
+  const upperDeep = upper.max.z - upper.min.z;
+  const cards = [
+    { width: 390, height: 700, left: 30, top: 150, across: 330 },
+    { width: 800, height: 600, left: 150, top: 80, across: 500 },
+    { width: 1920, height: 986, left: 600, top: 60, across: 760 },
+  ].map(({ width, height, left, top, across }) => ({
+    size: { width, height },
+    plan: {
+      left,
+      top,
+      right: left + across,
+      bottom: top + (across * upperDeep) / upperWide,
+    },
+  }));
 
-    shot.rig.setPlanFrame(plan);
-    shot.rig.tiltDown(home, 500);
+  function level(box: Box3, y: number): Box3 {
+    return new Box3(
+      new Vector3(box.min.x, y, box.min.z),
+      new Vector3(box.max.x, y, box.max.z),
+    );
+  }
+
+  function landed(box: Box, plan: Rect, slack: number): void {
+    expect(Math.abs(box.left - plan.left)).toBeLessThanOrEqual(slack);
+    expect(Math.abs(box.right - plan.right)).toBeLessThanOrEqual(slack);
+    expect(Math.abs(box.high - plan.top)).toBeLessThanOrEqual(slack);
+    expect(Math.abs(box.low - plan.bottom)).toBeLessThanOrEqual(slack);
+  }
+
+  it('lays the floor of the storey the plan shows exactly where the plan draws it, at every card size', () => {
+    for (const { size, plan } of cards) {
+      const shot = shoot(
+        [...corners(ground), ...corners(upper)],
+        size,
+        deskControls,
+        [],
+        undefined,
+        corners(upper),
+      );
+
+      shot.rig.setPlanFrame(plan);
+      shot.rig.tiltDown(home, 600);
+      run(shot.rig, 3016, 6000);
+
+      landed(shot.box(level(upper, upper.min.y)), plan, 2);
+    }
+  });
+
+  it('keeps the tops of the walls within a few pixels of the floor, so the walls do not lean out of the plan', () => {
+    for (const { size, plan } of cards) {
+      const shot = shoot(
+        [...corners(ground), ...corners(upper)],
+        size,
+        deskControls,
+        [],
+        undefined,
+        corners(upper),
+      );
+
+      shot.rig.setPlanFrame(plan);
+      shot.rig.tiltDown(home, 600);
+      run(shot.rig, 3016, 6000);
+
+      landed(
+        shot.box(level(upper, upper.max.y)),
+        plan,
+        0.01 * (plan.right - plan.left),
+      );
+    }
+  });
+
+  it('lines up with the plan however the reader turned and zoomed the house first', () => {
+    for (const { size, plan } of cards) {
+      for (const [x, y, z] of [
+        [-14, 5, 3],
+        [4, 30, -22],
+        [2, 3, 6],
+      ]) {
+        const shot = shoot(
+          [...corners(ground), ...corners(upper)],
+          size,
+          deskControls,
+          [],
+          undefined,
+          corners(upper),
+        );
+
+        shot.rig.cancel();
+        shot.camera.position.set(x, y, z);
+        shot.controls.update();
+        shot.rig.setPlanFrame(plan);
+        shot.rig.tiltDown(home, 600);
+        run(shot.rig, 3016, 6000);
+
+        landed(shot.box(level(upper, upper.min.y)), plan, 2);
+      }
+    }
+  });
+
+  it('gives the lens back as it rises from the plan, landing where the reader left', () => {
+    const size = { width: 1280, height: 806 };
+    const shot = shoot(
+      [...corners(ground), ...corners(upper)],
+      size,
+      deskControls,
+      [],
+      undefined,
+      corners(upper),
+    );
+    const lens = {
+      fov: shot.camera.fov,
+      near: shot.camera.near,
+      far: shot.camera.far,
+    };
+    const left = shot.camera.position.clone();
+
+    shot.rig.setPlanFrame({ left: 300, top: 100, right: 900, bottom: 625 });
+    shot.rig.tiltDown(home, 600);
     run(shot.rig, 3016, 6000);
 
-    const wallTops = new Box3(
-      new Vector3(storey.min.x, storey.max.y, storey.min.z),
-      new Vector3(storey.max.x, storey.max.y, storey.max.z),
-    );
-    const box = shot.box(wallTops);
+    expect(shot.camera.fov).toBeLessThan(lens.fov / 4);
 
-    expect(box.left).toBeCloseTo(plan.left, -0.5);
-    expect(box.right).toBeCloseTo(plan.right, -0.5);
-    expect(box.high).toBeCloseTo(plan.top, -0.5);
-    expect(box.low).toBeCloseTo(plan.bottom, -0.5);
+    shot.rig.tiltUp(home, 600);
+    run(shot.rig, 6016, 9000);
+
+    expect(shot.camera.fov).toBe(lens.fov);
+    expect(shot.camera.near).toBe(lens.near);
+    expect(shot.camera.far).toBe(lens.far);
+    expect(shot.camera.position.distanceTo(left)).toBeLessThan(1e-6);
   });
 });

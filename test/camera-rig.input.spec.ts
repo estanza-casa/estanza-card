@@ -4,9 +4,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   CameraRig,
+  dollyOf,
+  floorRing,
   homePose,
   houseFrame,
   overheadPose,
+  PLAN_FOV_DEG,
   type Pose,
   type RigControls,
   type RigStage,
@@ -17,6 +20,7 @@ const wide = { width: 1280, height: 800 };
 const storey = new Box3(new Vector3(-6, 0, -4), new Vector3(6, 2.8, 4));
 const place = { orbit: 0, x: 0, y: 0 };
 const SWITCH_MS = 500;
+const FOV = 50;
 const FRAME_MS = 16;
 
 type Gesture = 'drag' | 'wheel' | 'pinch';
@@ -44,7 +48,7 @@ function corners(box: Box3): Vector3[] {
 }
 
 function mount(): Scene {
-  const camera = new PerspectiveCamera(50, wide.width / wide.height, 0.1, 200);
+  const camera = new PerspectiveCamera(FOV, wide.width / wide.height, 0.1, 200);
   const element = document.createElement('div');
 
   Object.defineProperty(element, 'clientWidth', { value: wide.width });
@@ -106,7 +110,8 @@ function frames(scene: Scene, ms: number): void {
 
   while (scene.now < end) {
     scene.now += FRAME_MS;
-    scene.controls.update();
+
+    if (scene.controls.enabled) scene.controls.update();
     scene.rig.step(scene.now);
   }
 }
@@ -224,6 +229,20 @@ function toScene(scene: Scene, gesture: Gesture | null, at: number): void {
   }
 
   frames(scene, 3 * SWITCH_MS);
+}
+
+function overhead(): Vector3 {
+  const frame = houseFrame(corners(storey), {
+    fov: FOV,
+    aspect: wide.width / wide.height,
+  });
+
+  if (!frame) throw new Error('no house');
+
+  const pose = overheadPose(frame, floorRing(corners(storey)));
+  const dolly = dollyOf(FOV, PLAN_FOV_DEG);
+
+  return pose.position.sub(pose.target).multiplyScalar(dolly).add(pose.target);
 }
 
 function home(scene: Scene): Pose {
@@ -362,28 +381,20 @@ describe('input while the view switches between 3D and the plan', () => {
 
   it('lands on the plan view at once when the reader takes over the tilt down', () => {
     const scene = mount();
-    const frame = houseFrame(corners(storey), scene.camera);
-
-    if (!frame) throw new Error('no house');
 
     scene.rig.tiltDown(place, SWITCH_MS);
     frames(scene, 100);
     scene.rig.cancel();
 
-    expect(
-      scene.camera.position.distanceTo(overheadPose(frame).position),
-    ).toBeLessThan(1e-6);
+    expect(scene.camera.position.distanceTo(overhead())).toBeLessThan(1e-6);
     expect(scene.rig.moving).toBe(false);
   });
 
   it('lands on the plan view when a drag started before the switch goes on through it', () => {
     for (const touch of [false, true]) {
       const scene = mount();
-      const frame = houseFrame(corners(storey), scene.camera);
       const cx = wide.width / 2;
       const cy = wide.height / 2;
-
-      if (!frame) throw new Error('no house');
 
       scene.rig.cancel();
       pointer(scene, 'pointerdown', 1, touch, { x: cx, y: cy });
@@ -402,7 +413,7 @@ describe('input while the view switches between 3D and the plan', () => {
       frames(scene, 2 * SWITCH_MS);
 
       expect(
-        scene.camera.position.distanceTo(overheadPose(frame).position),
+        scene.camera.position.distanceTo(overhead()),
         touch ? 'touch' : 'mouse',
       ).toBeLessThan(1e-3);
     }

@@ -3,7 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { cardType, type SceneBinding } from '../src/bindings.js';
 import { EstanzaCard } from '../src/card.js';
-import { readViewChoice, VIEW_SWITCH_MS, viewKey } from '../src/plan.js';
+import {
+  readViewChoice,
+  VIEW_FADE_MS,
+  VIEW_SWITCH_MS,
+  viewKey,
+} from '../src/plan.js';
 import { EstanzaPlanView } from '../src/plan-view.js';
 import { EstanzaSceneView } from '../src/scene-view.js';
 import { IDLE_RETURN_MS, REFRAME_WAIT_MS } from '../src/tablet.js';
@@ -331,11 +336,12 @@ describe('the view switch', () => {
 
     const card = await mountCard();
 
-    await pick(card, '2d');
+    switchButton(card, '2d').click();
+    await wait(card, VIEW_FADE_MS / 2);
 
     expect(sceneOf(card)?.paused).toBe(false);
 
-    await wait(card, VIEW_SWITCH_MS);
+    await wait(card, VIEW_FADE_MS);
 
     expect(sceneOf(card)?.paused).toBe(true);
   });
@@ -675,7 +681,7 @@ describe('marks and temperatures while the view switches', () => {
     expect(sheetTitle(card)).not.toBeNull();
   });
 
-  it('lays marks out unseen at their plan spots while the camera turns to the plan', async () => {
+  it('keeps the 3D marks where they were while they fade out, then lays them at their plan spots', async () => {
     const scene = drawableScene();
     const card = await mountSpotted();
 
@@ -687,7 +693,7 @@ describe('marks and temperatures while the view switches', () => {
     await settle(card);
 
     expect(stageOf(card)?.classList).toContain('plan-arriving');
-    expect(spotOf(card, lamp)).toBe(`${planSpot.x},${planSpot.y}`);
+    expect(spotOf(card, lamp)).toBe(`${sceneSpot.x},${sceneSpot.y}`);
 
     scene.flat = true;
     await wait(card, VIEW_SWITCH_MS);
@@ -719,23 +725,70 @@ describe('marks and temperatures while the view switches', () => {
     expect(onPlan(card)).toBe(false);
   });
 
-  it('fades the marks and temperatures in with the plan', () => {
+  it('fades the 3D marks back in as the camera tilts up from the plan', async () => {
+    const scene = drawableScene(true);
+    const card = await mountSpotted();
+
+    await pick(card, '2d');
+    await wait(card, VIEW_SWITCH_MS);
+    await pick(card, '3d');
+    scene.frames += 1;
+    await wait(card, 32 + VIEW_FADE_MS);
+
+    expect(stageOf(card)?.classList).toContain('plan-rising');
+    expect(spotOf(card, lamp)).toBe(`${sceneSpot.x},${sceneSpot.y}`);
+
+    await wait(card, VIEW_SWITCH_MS);
+
+    expect(stageOf(card)?.classList).not.toContain('plan-rising');
+
+    await pick(card, '2d');
+
+    expect(stageOf(card)?.classList).not.toContain('plan-rising');
+  });
+
+  it('fades the 3D marks in over the last part of the tilt up', () => {
     const rules = EstanzaCard.styles.cssText.replace(/\s+/g, ' ');
 
-    expect(rules).toMatch(
-      /\.stage\.on-plan :is\(\.marks, \.temps, \.pins\) \{ animation: ez-appear 0\.5s ease-in-out 1; \}/,
+    expect(rules).toContain(
+      `.stage.plan-rising :is(.marks, .temps) { animation: ez-appear ${VIEW_FADE_MS}ms ease-in-out ${VIEW_SWITCH_MS - VIEW_FADE_MS}ms both; }`,
     );
   });
 
-  it('fades the marks and temperatures out with the plan, and hides them until it arrives', () => {
+  it('fades the marks and temperatures in with the plan', () => {
     const rules = EstanzaCard.styles.cssText.replace(/\s+/g, ' ');
 
-    expect(rules).toMatch(
-      /\.stage\.plan-leaving :is\(\.marks, \.temps\) \{ animation: ez-fade 0\.5s ease-in-out forwards; \}/,
+    expect(rules).toContain(
+      `.stage.on-plan :is(.marks, .temps, .pins) { animation: ez-appear ${VIEW_FADE_MS}ms ease-in-out 1; }`,
     );
-    expect(rules).toMatch(
+  });
+
+  it('fades the marks and temperatures out with the plan, and fades the 3D ones out as the camera tilts down', () => {
+    const rules = EstanzaCard.styles.cssText.replace(/\s+/g, ' ');
+
+    expect(rules).toContain(
+      `.stage.plan-leaving :is(.marks, .temps) { animation: ez-fade ${VIEW_FADE_MS}ms ease-in-out forwards; }`,
+    );
+    expect(rules).toContain(
+      `.stage.plan-arriving :is(.marks, .temps) { animation: ez-fade ${VIEW_FADE_MS}ms ease-in-out forwards; }`,
+    );
+    expect(rules).not.toMatch(
       /\.stage\.plan-arriving :is\(\.marks, \.temps\) \{ opacity: 0; \}/,
     );
+  });
+
+  it('crossfades the plan over the view in less time than the camera takes to tilt', () => {
+    const rules = EstanzaCard.styles.cssText.replace(/\s+/g, ' ');
+
+    expect(rules).toContain(
+      `estanza-plan-view { animation: ez-appear ${VIEW_FADE_MS}ms ease-in-out 1; }`,
+    );
+    expect(rules).toContain(
+      `estanza-plan-view.leaving { animation: ez-fade ${VIEW_FADE_MS}ms ease-in-out forwards; }`,
+    );
+    expect(VIEW_FADE_MS).toBeLessThan(VIEW_SWITCH_MS);
+    expect(VIEW_SWITCH_MS + VIEW_FADE_MS).toBeLessThanOrEqual(900);
+    expect(VIEW_SWITCH_MS).toBeGreaterThanOrEqual(600);
   });
 });
 

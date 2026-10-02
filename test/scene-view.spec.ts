@@ -60,6 +60,7 @@ import {
   overlayBrightness,
   pickedScope,
   pinSpot,
+  planStoreys,
   projectOutline,
   REVALIDATE_MS,
   sceneFrameloop,
@@ -967,6 +968,25 @@ describe('the house a storey is framed by', () => {
         ...storeyPoints(floor, anchor.matrixWorld).map((point) => point.y),
       ),
     ).toBeCloseTo(5.6);
+  });
+});
+
+describe('the storeys the plan view is fitted to', () => {
+  const storeys = ['ground', 'upper', 'attic'].map((id) => ({
+    floor: { id },
+  }));
+
+  it('fits only the storey the plan shows, not the storeys drawn beneath it', () => {
+    expect(planStoreys(storeys, 'upper', false)).toEqual([storeys[1]]);
+  });
+
+  it('fits every storey when the plan lays them all out side by side', () => {
+    expect(planStoreys(storeys, 'upper', true)).toEqual(storeys);
+  });
+
+  it('fits every storey when no storey is chosen or the chosen one is not drawn', () => {
+    expect(planStoreys(storeys, null, false)).toEqual(storeys);
+    expect(planStoreys(storeys, 'cellar', false)).toEqual(storeys);
   });
 });
 

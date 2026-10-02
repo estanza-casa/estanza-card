@@ -3,6 +3,7 @@ import { css, html, type TemplateResult, unsafeCSS } from 'lit';
 
 import type { View } from './bindings.js';
 import { CONTROL_GAP_PX } from './floor-view.js';
+import { VIEW_FADE_MS, VIEW_SWITCH_MS } from './plan.js';
 
 export type ViewSwitchView = {
   chosen: View;
@@ -95,7 +96,7 @@ export const switchStyles = css`
   }
 
   estanza-plan-view {
-    animation: ez-appear 0.5s ease-in-out 1;
+    animation: ez-appear ${unsafeCSS(VIEW_FADE_MS)}ms ease-in-out 1;
   }
 
   estanza-plan-view.arriving {
@@ -109,7 +110,7 @@ export const switchStyles = css`
   }
 
   estanza-plan-view.leaving {
-    animation: ez-fade 0.5s ease-in-out forwards;
+    animation: ez-fade ${unsafeCSS(VIEW_FADE_MS)}ms ease-in-out forwards;
   }
 
   estanza-plan-view.away {
@@ -123,15 +124,20 @@ export const switchStyles = css`
   }
 
   .stage.plan-leaving :is(.marks, .temps) {
-    animation: ez-fade 0.5s ease-in-out forwards;
+    animation: ez-fade ${unsafeCSS(VIEW_FADE_MS)}ms ease-in-out forwards;
   }
 
   .stage.plan-arriving :is(.marks, .temps) {
-    opacity: 0;
+    animation: ez-fade ${unsafeCSS(VIEW_FADE_MS)}ms ease-in-out forwards;
+  }
+
+  .stage.plan-rising :is(.marks, .temps) {
+    animation: ez-appear ${unsafeCSS(VIEW_FADE_MS)}ms ease-in-out
+      ${unsafeCSS(VIEW_SWITCH_MS - VIEW_FADE_MS)}ms both;
   }
 
   .stage.on-plan :is(.marks, .temps, .pins) {
-    animation: ez-appear 0.5s ease-in-out 1;
+    animation: ez-appear ${unsafeCSS(VIEW_FADE_MS)}ms ease-in-out 1;
   }
 
   .stage.on-plan :is(.marks, .temps, .pins, .highlight) {
@@ -181,8 +187,14 @@ export const switchStyles = css`
     estanza-plan-view.leaving,
     .stage.on-plan :is(.marks, .temps, .pins),
     .stage.plan-leaving :is(.marks, .temps),
+    .stage.plan-rising :is(.marks, .temps),
     .stage:not(.undrawn) .dock {
       animation: none;
+    }
+
+    .stage.plan-arriving :is(.marks, .temps) {
+      animation: none;
+      opacity: 0;
     }
 
     :host([tablet]) .dock {

@@ -242,6 +242,7 @@ import { namesStyles, numberRepeats, openingRowName } from './names.js';
 import {
   planFloor,
   readViewChoice,
+  VIEW_FADE_MS,
   VIEW_SWITCH_MS,
   viewKey,
   writeViewChoice,
@@ -913,6 +914,8 @@ export class EstanzaCard extends LitElement {
 
   private leftPlan: LeftPlan | null = null;
 
+  private leftScene: Pick<LeftPlan, 'laid' | 'labels'> | null = null;
+
   private planFraming: PlanFraming | null = null;
 
   private flattenScene = false;
@@ -930,6 +933,8 @@ export class EstanzaCard extends LitElement {
   @state() private sceneResting = false;
 
   @state() private planArriving = false;
+
+  @state() private planRising = false;
 
   @state() private chipFloors = false;
 
@@ -1517,7 +1522,11 @@ export class EstanzaCard extends LitElement {
 
     if (this.tile) return this.renderTile();
 
-    const left = this.planLeaving ? this.leftPlan : null;
+    const left = this.planLeaving
+      ? this.leftPlan
+      : this.planArriving
+        ? this.leftScene
+        : null;
     const drawn = left?.laid ?? this.laidMarks();
     const labels = left?.labels ?? this.temperatureLabels(drawn);
     const laid =
@@ -1545,6 +1554,7 @@ export class EstanzaCard extends LitElement {
                 : 'plan-leaving'
               : '',
             this.planArriving ? 'plan-arriving' : '',
+            this.planRising ? 'plan-rising' : '',
             this.planMoving ? 'retiling' : '',
             this.bottomSheet || this.bottomChooser ? 'sheet-up' : '',
             this.sheetCovers ? 'covered' : '',
@@ -2593,16 +2603,18 @@ export class EstanzaCard extends LitElement {
     if (view === this.view) return;
 
     const ms = motionLive.reduced ? 0 : VIEW_SWITCH_MS;
+    const fade = motionLive.reduced ? 0 : VIEW_FADE_MS;
     const place = burnInPlace(this.burnIndex);
 
     this.view = view;
+    this.planRising = false;
     this.cancel('view');
     this.stopWatch();
 
     if (view === '2d' && this.planLeaving) {
       this.planLeaving = false;
       this.planHeld = false;
-      this.later('view', ms, this.rest);
+      this.later('view', fade, this.rest);
 
       return;
     }
@@ -2618,6 +2630,7 @@ export class EstanzaCard extends LitElement {
         this.planArriving = false;
         this.sceneResting = true;
       } else {
+        this.leftScene = { laid: this.laid, labels: this.labels };
         this.planArriving = true;
         this.watchSwitch();
       }
@@ -2643,7 +2656,7 @@ export class EstanzaCard extends LitElement {
 
     if (ms > 0 && shown) {
       this.planLeaving = true;
-      this.later('view', ms, () => this.leavePlan(place, ms));
+      this.later('view', fade, () => this.leavePlan(place, ms));
 
       return;
     }
@@ -2740,7 +2753,7 @@ export class EstanzaCard extends LitElement {
       return;
     }
 
-    this.later('view', ms, () => this.leavePlan(place, ms));
+    this.later('view', VIEW_FADE_MS, () => this.leavePlan(place, ms));
   }
 
   private get betweenViews(): boolean {
@@ -2753,7 +2766,7 @@ export class EstanzaCard extends LitElement {
 
   private showPlan(): void {
     this.planArriving = false;
-    this.later('view', VIEW_SWITCH_MS, this.rest);
+    this.later('view', VIEW_FADE_MS, this.rest);
   }
 
   private rest = (): void => {
@@ -2763,9 +2776,16 @@ export class EstanzaCard extends LitElement {
   private leavePlan(place: HomePlace, ms: number): void {
     this.planLeaving = false;
     this.planHeld = false;
+    this.planRising = ms > 0;
     this.reframeSheet();
     this.sceneView?.tiltUp(place, ms);
+
+    if (ms > 0) this.later('view', ms, this.risen);
   }
+
+  private risen = (): void => {
+    this.planRising = false;
+  };
 
   private onCameraInput = (): void => {
     if (!this.planLeaving || this.planHeld) return;
@@ -2790,7 +2810,9 @@ export class EstanzaCard extends LitElement {
     this.planLeaving = false;
     this.planHeld = false;
     this.planArriving = false;
+    this.planRising = false;
     this.leftPlan = null;
+    this.leftScene = null;
     this.stopWatch();
   }
 

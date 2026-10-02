@@ -13,7 +13,8 @@ import type { Vec2 } from './living.js';
 import { DANGER_FILL, type RoomMarks } from './room-marks.js';
 import type { SceneLightOverlay, SceneOverlay } from './scene-view.js';
 
-export const VIEW_SWITCH_MS = 500;
+export const VIEW_SWITCH_MS = 600;
+export const VIEW_FADE_MS = 200;
 export const PLAN_WARM = '#f59a3d';
 export const LIT_FLOOR = 0.45;
 export const NIGHT_SHADE = '#0b1839';

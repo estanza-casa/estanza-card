@@ -18,6 +18,7 @@ import {
   blendPose,
   CameraRig,
   clearInsets,
+  dollyOf,
   fitPose,
   groundPoints,
   HOME_CAMERA,
@@ -27,6 +28,7 @@ import {
   houseFrame,
   OVERHEAD_PHI,
   overheadPose,
+  PLAN_FOV_DEG,
   PLAN_THETA,
   planSheetPlacement,
   type Pose,
@@ -41,6 +43,7 @@ import {
   spotPose,
   STACK_PITCH,
   stackFraming,
+  tiltStep,
   zoomReach,
 } from '../src/camera-rig.js';
 import {
@@ -318,9 +321,25 @@ describe('the camera rig', () => {
     const look = built.camera.position.clone().sub(built.controls.target);
 
     expect(built.controls.target.distanceTo(centre)).toBeLessThan(1e-6);
-    expect(look.length()).toBeCloseTo(distance, 6);
+    expect(look.length()).toBeCloseTo(distance * dollyOf(50, PLAN_FOV_DEG), 6);
+    expect(built.camera.fov).toBeCloseTo(PLAN_FOV_DEG, 9);
     expect(look.angleTo(new Vector3(0, 1, 0))).toBeCloseTo(OVERHEAD_PHI, 6);
     expect(rig.moving).toBe(false);
+  });
+
+  it('eases the tilt between 3D and the plan in and out without rushing its middle', () => {
+    const ms = 600;
+    const values = Array.from(
+      { length: ms / 6 + 1 },
+      (_, step) => tiltStep(1000, ms, 1000 + step * 6).value,
+    );
+    const steps = values.slice(1).map((value, step) => value - values[step]);
+
+    expect(values[0]).toBe(0);
+    expect(tiltStep(1000, ms, 1000 + ms)).toEqual({ value: 1, done: true });
+    expect(tiltStep(1000, ms, 1000 + ms - 1).done).toBe(false);
+    expect(steps[0]).toBeLessThan(0.001);
+    expect(Math.max(...steps)).toBeLessThan((1.6 * 6) / ms);
   });
 
   it('turns to the orientation of the floor plan when it tilts down', () => {
@@ -463,7 +482,7 @@ describe('the camera rig', () => {
 
     const drawn = [laid.min.x, laid.max.x].flatMap((x) =>
       [laid.min.z, laid.max.z].map((z) => {
-        const point = new Vector3(x, laid.max.y, z).project(built.camera);
+        const point = new Vector3(x, laid.min.y, z).project(built.camera);
 
         return {
           x: ((point.x + 1) / 2) * built.size.width,
@@ -496,7 +515,7 @@ describe('the camera rig', () => {
 
     const drawn = [storey.min.x, storey.max.x].flatMap((x) =>
       [storey.min.z, storey.max.z].map((z) => {
-        const point = new Vector3(x, storey.max.y, z).project(built.camera);
+        const point = new Vector3(x, storey.min.y, z).project(built.camera);
 
         return {
           x: ((point.x + 1) / 2) * built.size.width,
