@@ -11,8 +11,8 @@ import {
 import HomeScene, {
   type SunDirection,
 } from '@estanza/scene/components/HomeScene.js';
+import { useModel } from '@estanza/scene/components/Prop.js';
 import { ViewerQuality } from '@estanza/scene/components/ViewerQuality.js';
-import { sceneConfig } from '@estanza/scene/config.js';
 import { motionLive } from '@estanza/scene/env.js';
 import { floorLifts } from '@estanza/scene/explode.js';
 import { runStoreyPass } from '@estanza/scene/floor-pass.js';
@@ -31,7 +31,7 @@ import { redrawShadows } from '@estanza/scene/shadows.js';
 import type { SpillQuality } from '@estanza/scene/spill.js';
 import type { CardUpdate } from '@estanza/shared/card';
 import { tokens } from '@estanza/tokens';
-import { OrbitControls, useGLTF } from '@react-three/drei';
+import { OrbitControls } from '@react-three/drei';
 import { Canvas, type RootState, useFrame, useThree } from '@react-three/fiber';
 import {
   css,
@@ -56,7 +56,6 @@ import { createRoot, type Root } from 'react-dom/client';
 import {
   Box3,
   type Camera,
-  LoadingManager,
   MathUtils,
   Matrix4,
   type Mesh,
@@ -194,7 +193,6 @@ export const REVALIDATE_MS = 5 * 60 * 1000;
 
 const CAMERA = { position: HOME_CAMERA, fov: 50 };
 
-const REFUSED_URL = 'data:,';
 const SWIPE_PX = 48;
 const ORBIT_TOUCHES = { ONE: TOUCH.ROTATE, TWO: TOUCH.DOLLY_PAN };
 const PAGING_TOUCHES = { TWO: TOUCH.DOLLY_ROTATE };
@@ -474,27 +472,31 @@ export function withoutCatalogProps(home: HomeDocument): HomeDocument {
 
 function catalogUrl(
   prop: HomeDocument['additions']['props'][number],
+  base: string,
 ): string | null {
   const def =
     prop.type === 'catalog' && prop.catalogId
       ? catalogById.get(prop.catalogId)
       : undefined;
 
-  return def ? `${sceneConfig.modelBase}/${def.file}` : null;
+  return def ? `${base}/${def.file}` : null;
 }
 
-export function catalogUrls(home: HomeDocument): string[] {
+export function catalogUrls(home: HomeDocument, base: string): string[] {
   return [
-    ...new Set(home.additions.props.flatMap((prop) => catalogUrl(prop) ?? [])),
+    ...new Set(
+      home.additions.props.flatMap((prop) => catalogUrl(prop, base) ?? []),
+    ),
   ];
 }
 
 export function withLoadedProps(
   home: HomeDocument,
   loaded: ReadonlySet<string>,
+  base: string,
 ): HomeDocument {
   const props = home.additions.props.filter((prop) => {
-    const url = catalogUrl(prop);
+    const url = catalogUrl(prop, base);
 
     return url === null || loaded.has(url);
   });
@@ -502,23 +504,8 @@ export function withLoadedProps(
   return { ...home, additions: { ...home.additions, props } };
 }
 
-export function catalogOnly(base: string): LoadingManager {
-  const manager = new LoadingManager();
-
-  manager.setURLModifier((asked) =>
-    asked.startsWith(`${base}/`) || asked.startsWith('blob:')
-      ? asked
-      : REFUSED_URL,
-  );
-
-  return manager;
-}
-
 function ModelLoad({ url }: { url: string }): null {
-  // The scene shares one glTF loader and leaves the last load's manager on it.
-  useGLTF(url, false, false, (loader) => {
-    loader.manager = catalogOnly(sceneConfig.modelBase);
-  });
+  useModel(url);
 
   return null;
 }
@@ -2062,7 +2049,6 @@ export class EstanzaSceneView extends LitElement {
       this.rig.switchFloor();
     }
 
-    sceneConfig.modelBase = modelsBase(this.modelsOrigin);
     void this.loadDocument();
 
     if (this.status === 'ready' && !this.headless) {
@@ -2528,7 +2514,8 @@ export class EstanzaSceneView extends LitElement {
       (floor) => view.explode > 0 || floor.level >= 0 || floor.level === top,
     );
 
-    const loading = catalogUrls(built.home).filter(
+    const modelBase = modelsBase(this.modelsOrigin);
+    const loading = catalogUrls(built.home, modelBase).filter(
       (url) => !this.loadedModels.has(url),
     );
 
@@ -2556,7 +2543,7 @@ export class EstanzaSceneView extends LitElement {
             })
           : null,
         createElement(HomeScene, {
-          home: withLoadedProps(built.home, this.loadedModels),
+          home: withLoadedProps(built.home, this.loadedModels, modelBase),
           floors: this.floorsMemo.floors,
           active: null,
           night: this.night,
@@ -2571,6 +2558,7 @@ export class EstanzaSceneView extends LitElement {
           brightness: overlayBrightness(view.home, this.overlay),
           onFit: this.onFit,
           models: modelSource(this.apiOrigin, this.shareId),
+          modelBase,
           labels: (floor: DerivedFloor) => [
             createElement('group', {
               key: 'anchor',

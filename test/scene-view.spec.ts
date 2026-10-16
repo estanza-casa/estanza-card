@@ -2,7 +2,6 @@ import type { HomeDocument } from '@estanza/plan-engine';
 import type { Light } from '@estanza/plan-engine/document';
 import { homeDocumentSchema } from '@estanza/plan-engine/document';
 import { deriveFloors } from '@estanza/plan-engine/geometry/geometry.js';
-import { sceneConfig } from '@estanza/scene/config.js';
 import { motionLive } from '@estanza/scene/env.js';
 import {
   GARDEN_NIGHT,
@@ -2105,29 +2104,6 @@ describe('document loading', () => {
 
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       'http://homeassistant.local:8930/v1/integrations/home-assistant/abc123',
-    );
-  });
-
-  it('points the scene at the models the public webapp serves', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(servedHome()));
-
-    await mountView((element) => {
-      element.shareId = 'abc123';
-    });
-
-    expect(sceneConfig.modelBase).toBe('https://app.estanza.casa/assets/props');
-  });
-
-  it('points the scene at a self hosted models origin', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(servedHome()));
-
-    await mountView((element) => {
-      element.shareId = 'abc123';
-      element.modelsOrigin = 'http://homeassistant.local:8080';
-    });
-
-    expect(sceneConfig.modelBase).toBe(
-      'http://homeassistant.local:8080/assets/props',
     );
   });
 

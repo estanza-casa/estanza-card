@@ -2,17 +2,22 @@ import type { HomeDocument } from '@estanza/plan-engine';
 import { homeDocumentSchema } from '@estanza/plan-engine/document';
 import HomeScene from '@estanza/scene/components/HomeScene.js';
 import type { ModelSource } from '@estanza/scene/components/Prop.js';
+import { sceneConfig } from '@estanza/scene/config.js';
 import { Children, isValidElement, type ReactElement } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { catalogOnly, ModelsLoaded } from '../src/scene-view.js';
+import { ModelsLoaded } from '../src/scene-view.js';
 import homeFixture from './fixtures/home.json';
 
 type Drawn = {
   sceneTree: (source: HomeDocument, frameloop: 'demand') => ReactElement;
 };
 
-type HomeSceneProps = { home: HomeDocument; models?: ModelSource };
+type HomeSceneProps = {
+  home: HomeDocument;
+  models?: ModelSource;
+  modelBase?: string;
+};
 
 type Loading = ReactElement<{
   urls: string[];
@@ -82,23 +87,48 @@ describe('furniture before its models arrive', () => {
   });
 });
 
-describe('loading the furniture models', () => {
-  const manager = catalogOnly('https://app.estanza.casa/assets/props');
+describe('the furniture address of each card', () => {
+  function cardWith(modelsOrigin?: string): HTMLElement {
+    const view = document.createElement('estanza-scene-view');
 
-  it('lets a furniture model load from the furniture address and its own pictures', () => {
-    expect(
-      manager.resolveURL('https://app.estanza.casa/assets/props/sofa.glb'),
-    ).toBe('https://app.estanza.casa/assets/props/sofa.glb');
-    expect(manager.resolveURL('blob:https://app.estanza.casa/1')).toBe(
-      'blob:https://app.estanza.casa/1',
+    view.homeDocument = furnished;
+    if (modelsOrigin) view.modelsOrigin = modelsOrigin;
+    document.body.append(view);
+
+    return view;
+  }
+
+  function addresses(view: HTMLElement): { base?: string; urls?: string[] } {
+    const children = drawn(view);
+    const scene = children.find((child) => child.type === HomeScene);
+    const loading = children.find(
+      (child): child is Loading => child.type === ModelsLoaded,
+    );
+
+    return {
+      base: (scene?.props as HomeSceneProps).modelBase,
+      urls: loading?.props.urls,
+    };
+  }
+
+  it('loads its furniture from its own address, whatever another card on the page says', () => {
+    const broken = cardWith('https://broken.example');
+    const good = cardWith();
+
+    expect(addresses(broken).base).toBe('https://broken.example/assets/props');
+    expect(addresses(broken).urls?.[0]).toMatch(
+      /^https:\/\/broken\.example\/assets\/props\//,
+    );
+    expect(addresses(good).base).toBe('https://app.estanza.casa/assets/props');
+    expect(addresses(good).urls?.[0]).toMatch(
+      /^https:\/\/app\.estanza\.casa\/assets\/props\//,
     );
   });
 
-  it('refuses any other address', () => {
-    expect(manager.resolveURL('https://evil.example/track.png')).toBe('data:,');
-    expect(
-      manager.resolveURL('https://app.estanza.casa/assets/props-other/x.glb'),
-    ).toBe('data:,');
+  it('leaves the scene-wide default address alone', () => {
+    cardWith('https://broken.example');
+
+    expect(sceneConfig.modelBase).toBe('/assets/props');
   });
 });
 
