@@ -202,9 +202,9 @@ beforeEach(() => {
   vi.spyOn(document, 'visibilityState', 'get').mockImplementation(
     () => visibility,
   );
-  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
-    {} as RenderingContext,
-  );
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+    getExtension: () => null,
+  } as unknown as RenderingContext);
   vi.stubGlobal('ResizeObserver', undefined);
 });
 

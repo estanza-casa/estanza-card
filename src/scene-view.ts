@@ -1234,11 +1234,23 @@ function StoreyVeil({
   return createElement('group', { ref: anchor });
 }
 
-function webglSupported(owner: Document): boolean {
+let webglProbed: boolean | null = null;
+
+export function webglSupported(owner: Document): boolean {
+  webglProbed ??= probeWebgl(owner);
+
+  return webglProbed;
+}
+
+function probeWebgl(owner: Document): boolean {
   try {
     const probe = owner.createElement('canvas');
+    const context = probe.getContext('webgl2') ?? probe.getContext('webgl');
 
-    return Boolean(probe.getContext('webgl2') ?? probe.getContext('webgl'));
+    // WebKit counts a context against its limit until it is lost, even once the canvas is gone.
+    context?.getExtension('WEBGL_lose_context')?.loseContext();
+
+    return Boolean(context);
   } catch {
     return false;
   }
