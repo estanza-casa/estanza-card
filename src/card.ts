@@ -5995,8 +5995,9 @@ export class EstanzaCard extends LitElement {
     const label = settled.labels.find((shown) => shown.key === pill.key);
     const from = settled.anchors.get(pill.key);
     const to = anchors.get(pill.key);
+    const room = pill.inner ?? pill.room;
 
-    if (!label || !from || !to) return null;
+    if (!label || !from || !to || !room || label.anchor) return null;
 
     const size = label.small
       ? { width: labelWidth(label.text, true), height: SMALL_LABEL_HEIGHT }
@@ -6017,20 +6018,15 @@ export class EstanzaCard extends LitElement {
         box.y - box.height / 2 >= 0 &&
         box.x + box.width / 2 <= width &&
         box.y + box.height / 2 <= height &&
-        !covered(box, blocked)
+        !covered(box, blocked) &&
+        pillInside(spot, size.width, size.height, room)
       );
     };
     const at = [...spotsAround(shift(label), HELD_NUDGE_PX, 2)].find(clear);
 
     if (!at) return null;
 
-    return {
-      key: pill.key,
-      ...at,
-      ...(label.anchor ? { anchor: shift(label.anchor) } : {}),
-      size,
-      small: label.small,
-    };
+    return { key: pill.key, ...at, size, small: label.small };
   }
 
   private storeyPill(

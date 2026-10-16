@@ -15,6 +15,7 @@ import {
   type MarkBox,
   pillInside,
   placePills,
+  SMALL_LABEL_HEIGHT,
   strandedPills,
 } from '../src/living.js';
 import { VIEW_SWITCH_MS } from '../src/plan.js';
@@ -572,6 +573,10 @@ describe('the temperature pills of Casa Aurora while the camera moves', () => {
       ) / 2;
     const target = { x: light.x + half + 14 + 6, y: light.y };
     const by = { x: target.x - start.x, y: target.y - start.y };
+    const move = (point: Point): Point => ({
+      x: point.x + by.x,
+      y: point.y + by.y,
+    });
 
     await moveTo(card, {
       ...screen,
@@ -580,10 +585,9 @@ describe('the temperature pills of Casa Aurora while the camera moves', () => {
           slug,
           {
             ...room,
-            anchor: room.anchor && {
-              x: room.anchor.x + by.x,
-              y: room.anchor.y + by.y,
-            },
+            floor: room.floor.map(move),
+            top: room.top.map(move),
+            anchor: room.anchor && move(room.anchor),
           },
         ]),
       ),
@@ -595,6 +599,48 @@ describe('the temperature pills of Casa Aurora while the camera moves', () => {
 
     expect(end?.x).toBeCloseTo(target.x, 0);
     expect(end?.y).toBeCloseTo(target.y, 0);
+  });
+
+  it('seats the tapped pill back inside its room when the house carries it out of the room', async () => {
+    const screen = shots['1280-3d'];
+    const card = await mountAurora('3d', screen);
+    const ring = screen.rooms.hall.top;
+    const xs = ring.map((point) => point.x);
+    const by = Math.max(...xs) - Math.min(...xs) + 40;
+
+    card.shadowRoot
+      ?.querySelector<HTMLElement>('.temp[data-room="hall"]')
+      ?.click();
+    await vi.advanceTimersByTimeAsync(1000);
+    await settle(card);
+
+    await moveTo(card, {
+      ...screen,
+      rooms: Object.fromEntries(
+        Object.entries(screen.rooms).map(([slug, room]) => [
+          slug,
+          {
+            ...room,
+            anchor: room.anchor && { x: room.anchor.x + by, y: room.anchor.y },
+          },
+        ]),
+      ),
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    await settle(card);
+
+    const hall = card.shadowRoot?.querySelector<HTMLElement>(
+      '.temp[data-room="hall"]',
+    );
+
+    if (!hall) throw new Error('no hall pill');
+
+    const small = hall.classList.contains('small');
+    const width = labelWidth(hall.textContent?.trim() ?? '', small);
+    const height = small ? SMALL_LABEL_HEIGHT : LABEL_HEIGHT;
+
+    expect(hall.classList.contains('selected')).toBe(true);
+    expect(pillInside(spotOf(hall), width, height, ring)).toBe(true);
   });
 
   it('keeps carrying the tapped pill while its room is briefly hidden mid-move', async () => {
