@@ -432,6 +432,35 @@ describe('readHomeFile', () => {
     ).toEqual(home);
   });
 
+  it('reads a home file downloaded from the web app', () => {
+    const download = {
+      format: 'estanza.home',
+      fileVersion: 1,
+      generator: 'estanza.casa',
+      appVersion: 'abc1234',
+      exportedAt: '2026-10-01T09:30:00.000Z',
+      owner: 'user-1',
+      home: homeFixture,
+    };
+
+    expect(readHomeFile(`${JSON.stringify(download, null, 2)}\n`)).toEqual(
+      home,
+    );
+  });
+
+  it('refuses a web app home file from a newer file version', () => {
+    const download = {
+      format: 'estanza.home',
+      fileVersion: 2,
+      generator: 'estanza.casa',
+      appVersion: 'abc1234',
+      exportedAt: '2026-10-01T09:30:00.000Z',
+      home: homeFixture,
+    };
+
+    expect(readHomeFile(JSON.stringify(download))).toBeNull();
+  });
+
   it('refuses a file that is not JSON or not a home', () => {
     expect(readHomeFile('not json')).toBeNull();
     expect(readHomeFile('{"hello":"world"}')).toBeNull();

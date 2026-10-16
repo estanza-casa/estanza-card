@@ -277,6 +277,10 @@ function segmentsTemplate<TValue extends string>({
 export const notHomeFile =
   'That is not an Estanza home file. Export one from Share in the Estanza editor.';
 
+const HOME_FILE_FORMAT = 'estanza.home';
+
+const HOME_FILE_VERSION = 1;
+
 const PICKER_ROWS = 8;
 
 const OPEN_ROWS = 6;
@@ -3464,6 +3468,10 @@ function homeDocumentOf(payload: unknown): unknown {
   const body = asRecord(payload);
 
   if (!body) return payload;
+
+  if (body.format === HOME_FILE_FORMAT) {
+    return body.fileVersion === HOME_FILE_VERSION ? body.home : null;
+  }
 
   const home = asRecord(body.home);
 
