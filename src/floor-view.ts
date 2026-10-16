@@ -53,6 +53,22 @@ export function floorStackTemplate(view: FloorStackView): TemplateResult {
   </div>`;
 }
 
+export function revealChosenFloor(list: HTMLElement): void {
+  const chosen = list.querySelector<HTMLElement>('.fb[aria-pressed="true"]');
+
+  if (!chosen) return;
+
+  const listTop = list.getBoundingClientRect().top;
+  const box = chosen.getBoundingClientRect();
+  const start = box.top - listTop + list.scrollTop - CONTROL_GAP_PX;
+  const end = box.bottom - listTop + list.scrollTop + CONTROL_GAP_PX;
+
+  if (start < list.scrollTop) list.scrollTop = start;
+  else if (end > list.scrollTop + list.clientHeight) {
+    list.scrollTop = end - list.clientHeight;
+  }
+}
+
 export type FloorPagesView = {
   storeys: Storey[];
   shown: string | null;

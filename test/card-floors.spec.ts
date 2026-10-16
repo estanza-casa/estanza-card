@@ -9,11 +9,13 @@ import aurora from '../../estanza/packages/shared/src/demo-home.json';
 import { cardType, type SceneBinding } from '../src/bindings.js';
 import type { EstanzaCard } from '../src/card.js';
 import {
+  CONTROL_GAP_PX,
   DANGER_DOT,
   floorDotRing,
   floorStackTemplate,
   floorStyles,
   NOTICE_DOT,
+  revealChosenFloor,
 } from '../src/floor-view.js';
 import type { Storey } from '../src/floors.js';
 import type { EstanzaSceneView } from '../src/scene-view.js';
@@ -596,6 +598,48 @@ describe('the floor stack on a narrow card', () => {
 
     expect(host.querySelector('[data-floor="ufloor"] .dot')).not.toBeNull();
     expect(host.querySelector('[data-floor="f1"] .dot')).toBeNull();
+  });
+});
+
+describe('a floor list taller than the card', () => {
+  function tallList(chosenTop: number, scrollTop: number): HTMLElement {
+    const list = document.createElement('div');
+    const chosen = document.createElement('button');
+
+    chosen.className = 'fb';
+    chosen.setAttribute('aria-pressed', 'true');
+    list.append(chosen);
+    Object.defineProperty(list, 'clientHeight', { value: 300 });
+    list.scrollTop = scrollTop;
+    list.getBoundingClientRect = () => new DOMRect(0, 100, 40, 300);
+    chosen.getBoundingClientRect = () =>
+      new DOMRect(0, 100 + chosenTop - scrollTop, 40, 32);
+
+    return list;
+  }
+
+  it('scrolls a storey below the fold up into view', () => {
+    const list = tallList(1200, 0);
+
+    revealChosenFloor(list);
+
+    expect(list.scrollTop).toBe(1200 + 32 + CONTROL_GAP_PX - 300);
+  });
+
+  it('scrolls back up to a storey above the fold', () => {
+    const list = tallList(40, 900);
+
+    revealChosenFloor(list);
+
+    expect(list.scrollTop).toBe(40 - CONTROL_GAP_PX);
+  });
+
+  it('leaves the list alone when the storey is already in view', () => {
+    const list = tallList(500, 400);
+
+    revealChosenFloor(list);
+
+    expect(list.scrollTop).toBe(400);
   });
 });
 

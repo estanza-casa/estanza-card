@@ -954,6 +954,55 @@ describe('the house a storey is framed by', () => {
     );
   });
 
+  it('frames only the chosen storey, not the storeys drawn beneath it', () => {
+    const storey = { ...homeFixture.plan.floors[0], rooms: [] };
+    const [lower, upper] = deriveFloors(
+      homeDocumentSchema.parse({
+        ...homeFixture,
+        plan: {
+          ...homeFixture.plan,
+          floors: [storey, { ...storey, id: 'upper', level: 1 }],
+        },
+      }),
+    );
+    const scene = new Scene();
+    const anchors = new Map<string, Group>();
+
+    for (const floor of [lower, upper]) {
+      const level = new Group();
+      const lifted = new Group();
+      const anchor = new Group();
+
+      level.position.y = floor.level * 2.8;
+      anchor.scale.setScalar(0.01);
+      lifted.add(anchor);
+      level.add(lifted);
+      scene.add(level);
+      anchors.set(floor.id, anchor);
+    }
+
+    scene.updateMatrixWorld();
+
+    const view = document.createElement('estanza-scene-view');
+    const state = { scene, get: () => state };
+
+    view.floor = upper.id;
+    Object.assign(view, {
+      sceneState: state,
+      anchors,
+      framedStoreys: [lower, upper],
+    });
+
+    const points = (
+      view as unknown as { housePoints: () => Vector3[] }
+    ).housePoints();
+
+    expect(points.length).toBeGreaterThan(0);
+    expect(Math.min(...points.map((point) => point.y))).toBeCloseTo(
+      upper.level * 2.8,
+    );
+  });
+
   it('follows the storey where the renderer lifted it', () => {
     const [floor] = deriveFloors(home);
     const anchor = new Group();

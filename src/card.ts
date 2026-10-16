@@ -148,6 +148,7 @@ import {
   floorStackTemplate,
   floorStyles,
   NOTICE_DOT,
+  revealChosenFloor,
 } from './floor-view.js';
 import {
   defaultFloor,
@@ -953,6 +954,8 @@ export class EstanzaCard extends LitElement {
   @state() private narrowCard = false;
 
   @state() private floorsOpen = false;
+
+  private revealedFloor: { list: Element; floor: FloorChoice } | null = null;
 
   private controlsClear: Rect[] | null = null;
 
@@ -1836,6 +1839,23 @@ export class EstanzaCard extends LitElement {
     this.moveFocus();
     this.flattenOnce();
     this.splitTargets();
+    this.revealFloor();
+  }
+
+  private revealFloor(): void {
+    const list = this.renderRoot.querySelector<HTMLElement>('.floors');
+    const floor = this.shownFloor;
+
+    if (!list) return;
+    if (
+      this.revealedFloor?.list === list &&
+      this.revealedFloor.floor === floor
+    ) {
+      return;
+    }
+
+    this.revealedFloor = { list, floor };
+    revealChosenFloor(list);
   }
 
   private flattenOnce(): void {

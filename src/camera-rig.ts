@@ -52,7 +52,12 @@ export type RigControls = {
   enabled?: boolean;
 };
 
-export type RigFrame = { center: Vector3; distance: number; turn?: number };
+export type RigFrame = {
+  center: Vector3;
+  distance: number;
+  turn?: number;
+  ground?: number;
+};
 
 export type RigStage = {
   camera: PerspectiveCamera;
@@ -523,19 +528,20 @@ export function houseFrame(
 ): RigFrame | null {
   if (house.length === 0) return null;
 
-  const { center, distance } = houseReach(house, camera);
+  const { center, distance, ground } = houseReach(house, camera);
 
   return {
     center,
     distance,
-    turn: portraitTurn(house, center, distance, camera, least),
+    ground,
+    turn: portraitTurn(house, center, distance, ground, camera, least),
   };
 }
 
 function houseReach(
   house: readonly Vector3[],
   camera: Pick<PerspectiveCamera, 'fov' | 'aspect'>,
-): { center: Vector3; distance: number } {
+): { center: Vector3; distance: number; ground: number } {
   const box = new Box3().setFromPoints([...house]);
   const size = box.getSize(new Vector3());
   const largest = Math.max(size.x, size.y, size.z);
@@ -544,6 +550,7 @@ function houseReach(
   return {
     center: box.getCenter(new Vector3()),
     distance: FIT_MARGIN * Math.max(tall, tall / camera.aspect),
+    ground: Math.max(0, box.min.y),
   };
 }
 
@@ -551,6 +558,7 @@ function portraitTurn(
   house: readonly Vector3[],
   center: Vector3,
   distance: number,
+  ground: number,
   camera: Pick<PerspectiveCamera, 'fov' | 'aspect'>,
   least: number,
 ): number {
@@ -558,7 +566,7 @@ function portraitTurn(
 
   const eye = new PerspectiveCamera(camera.fov, camera.aspect, 0.01, 1000);
   const fill = (turn: number): number => {
-    const pose = homePose(center, distance, turn, camera.aspect, least);
+    const pose = homePose(center, distance, turn, camera.aspect, least, ground);
 
     eye.position.copy(pose.position);
     eye.lookAt(pose.target);
@@ -914,8 +922,12 @@ export function homePose(
   orbit: number,
   aspect = 1,
   least = 0,
+  ground = 0,
 ): Pose {
-  const toCamera = new Vector3(...HOME_CAMERA).sub(center).normalize();
+  const toCamera = new Vector3(...HOME_CAMERA)
+    .setY(HOME_CAMERA[1] + ground)
+    .sub(center)
+    .normalize();
   const level = Math.max(Math.asin(toCamera.y), least);
   const portrait = MathUtils.clamp((1 - aspect) / (1 - PORTRAIT_ASPECT), 0, 1);
   const pitch =
@@ -1019,7 +1031,7 @@ function dollied(pose: Pose, dolly: number): Pose {
 
 export function fitPose(home: RigFrame, from: Pose, least = 0): Pose {
   const bearing = new Spherical().setFromVector3(
-    from.position.clone().sub(home.center),
+    from.position.clone().sub(from.target),
   );
   const direction = new Vector3().setFromSpherical(
     new Spherical(1, Math.min(bearing.phi, Math.PI / 2 - least), bearing.theta),
@@ -1050,6 +1062,7 @@ function aimedPose(
     ease.place.orbit + (home.turn ?? 0),
     camera.aspect,
     least,
+    home.ground,
   );
 }
 
@@ -1567,6 +1580,7 @@ export class CameraRig {
         this.place.orbit + (home.turn ?? 0),
         camera.aspect,
         this.leastPitch,
+        home.ground,
       );
 
       this.seat = null;

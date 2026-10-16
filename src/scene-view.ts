@@ -2757,7 +2757,10 @@ export class EstanzaSceneView extends LitElement {
   }
 
   private housePoints(): Vector3[] {
-    return this.storeysAt((storey) => ({ at: storey.base, size: 1 }));
+    return this.storeysAt(
+      (storey) => ({ at: storey.base, size: 1 }),
+      (storeys) => planStoreys(storeys, this.floor, false),
+    );
   }
 
   // The camera frames where the storeys come to rest, not where their lift or spread has them now.

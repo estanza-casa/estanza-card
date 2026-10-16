@@ -2378,6 +2378,43 @@ describe('the frame the home is fitted in', () => {
   it('has no frame without rooms, so the renderer frames what it drew', () => {
     expect(houseFrame([], camera)).toBeNull();
   });
+
+  it('stands on the floor of the storey it frames', () => {
+    const high = storey.clone().translate(new Vector3(0, 30, 0));
+
+    expect(houseFrame(corners(high), camera)?.ground).toBe(30);
+  });
+
+  it('stands on the ground for a house with a cellar', () => {
+    expect(houseFrame(corners(stack), camera)?.ground).toBe(0);
+  });
+});
+
+describe('a storey high above the ground', () => {
+  const lift = new Vector3(0, 30, 0);
+
+  it('is looked down on from the same height above it as the ground floor', () => {
+    const low = homePose(centre, distance, 0);
+    const high = homePose(centre.clone().add(lift), distance, 0, 1, 0, 30);
+
+    expect(
+      high.position.clone().sub(lift).distanceTo(low.position),
+    ).toBeLessThan(1e-9);
+  });
+
+  it('is refitted from the angle the camera looked at it, not from where it stood', () => {
+    const target = centre.clone().add(lift);
+    const from = {
+      position: centre.clone().add(new Vector3(8, 8, 8)),
+      target: centre.clone(),
+    };
+    const pose = fitPose({ center: target, distance }, from);
+    const facing = pose.position.clone().sub(target).normalize();
+
+    expect(facing.distanceTo(new Vector3(1, 1, 1).normalize())).toBeLessThan(
+      1e-9,
+    );
+  });
 });
 
 describe('the reach of wheel and pinch zoom', () => {
