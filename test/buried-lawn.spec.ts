@@ -5,8 +5,19 @@ import {
   deriveFloors,
 } from '@estanza/plan-engine/geometry/geometry.js';
 import { plotColor } from '@estanza/plan-engine/geometry/plot.js';
-import { basementBounds, wallBounds } from '@estanza/scene/ground.js';
-import { Children, isValidElement, type ReactElement } from 'react';
+import {
+  basementBounds,
+  GARDEN_NIGHT,
+  wallBounds,
+} from '@estanza/scene/ground.js';
+import {
+  Children,
+  createElement,
+  isValidElement,
+  type ReactElement,
+} from 'react';
+import { flushSync } from 'react-dom';
+import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import aurora from '../../estanza/packages/shared/src/demo-home.json';
@@ -207,6 +218,41 @@ describe('the lid over a basement pit', () => {
 
   const storeyAt = (level: number): string =>
     floors.find((floor) => floor.level === level)?.id ?? '';
+
+  type Painted = { type: string; props: { color: string } };
+
+  function lidPaint(home: HomeDocument, night: boolean): Painted | undefined {
+    const root = createRoot(document.createElement('div'));
+    const seen: { lid: ReactElement | null } = { lid: null };
+    const Probe = (): null => {
+      seen.lid = PitLid({ home, floors, night, lit: night });
+
+      return null;
+    };
+
+    flushSync(() => root.render(createElement(Probe)));
+    root.unmount();
+
+    return (seen.lid?.props as { children: Painted } | undefined)?.children;
+  }
+
+  it('grasses the pit over in the tone of the ground zone it is dug into, night and day', () => {
+    for (const night of [true, false]) {
+      const paint = lidPaint(auroraHome(), night);
+
+      expect(paint?.type).toBe('meshStandardMaterial');
+      expect(paint?.props.color).toBe(plotColor('grass'));
+    }
+  });
+
+  it('keeps the lawn tone on the lid when no ground zone wraps the pit', () => {
+    const bare = auroraHome();
+
+    bare.additions.groundZones = [];
+    bare.additions.ground = { skin: 'soft' };
+
+    expect(lidPaint(bare, true)?.props.color).toBe(GARDEN_NIGHT);
+  });
 
   it('grasses the pit over when a storey above the ground is in focus', () => {
     expect(lidOf(storeyAt(1))).toBeDefined();

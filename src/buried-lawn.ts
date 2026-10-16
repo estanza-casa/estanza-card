@@ -163,23 +163,36 @@ export function PitLid({
   const lid = useMemo(() => lidPlane(pit), [pit]);
   const skin = engineAdditions(home).ground?.skin ?? DEFAULT_SKIN;
   const painted = useMemo(() => groundSkin(skin), [skin]);
+  const zoned = useMemo(
+    () => (pit ? coverTone(home, floors) : null),
+    [pit, home, floors],
+  );
 
   useEffect(() => () => lid.dispose(), [lid]);
 
   if (!pit) return null;
+
+  const where = {
+    name: PIT_LID,
+    geometry: lid,
+    rotation: [-Math.PI / 2, 0, 0],
+    position: [0, COVER_LIFT_M, 0],
+  };
+
+  if (zoned) {
+    return createElement(
+      'mesh',
+      { ...where, receiveShadow: true },
+      createElement('meshStandardMaterial', { key: 'zone', color: zoned }),
+    );
+  }
 
   const day = painted ? SKIN_GROUND : PLAIN_GROUND;
   const tone = night ? (painted ? SKIN_GARDEN_NIGHT : GARDEN_NIGHT) : day;
 
   return createElement(
     'mesh',
-    {
-      name: PIT_LID,
-      geometry: lid,
-      rotation: [-Math.PI / 2, 0, 0],
-      position: [0, COVER_LIFT_M, 0],
-      receiveShadow: groundCatchesShadow(lit, night),
-    },
+    { ...where, receiveShadow: groundCatchesShadow(lit, night) },
     createElement(lit ? 'meshStandardMaterial' : 'meshBasicMaterial', {
       key: `${skin}|${lit}`,
       color: tone,
