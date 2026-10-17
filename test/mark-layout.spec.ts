@@ -6,6 +6,9 @@ import {
   type MarkLayout,
   type MarkRequest,
   splitHits,
+  stackedStoreys,
+  type StoreyMarks,
+  storeySpots,
   TOUCH_PX,
 } from '../src/mark-layout.js';
 
@@ -547,5 +550,107 @@ describe('splitting the hit areas of neighbours', () => {
 
     expect(lone[0]).toEqual(box(0, 0, 20, 20));
     expect(lone[1]).toEqual(box(40, 0, 60, 20));
+  });
+});
+
+const BUBBLE = { width: 58, height: 38 };
+
+function storey(
+  level: number,
+  top: number,
+  marks: Point[] = [{ x: 200, y: top + 20 }],
+): StoreyMarks {
+  return {
+    id: `level-${level}`,
+    level,
+    bounds: { left: 170, top, right: 230, bottom: top + 45 },
+    marks: marks.map((at) => ({ ...at, ...GLYPH })),
+  };
+}
+
+describe('marks of storeys drawn on top of each other', () => {
+  it('folds a storey drawn closer than a finger below the storey above', () => {
+    const tower = [storey(0, 600), storey(1, 565), storey(2, 400)];
+
+    expect([...stackedStoreys(tower)]).toEqual(['level-0']);
+  });
+
+  it('folds a storey whose marks touch the marks of the storey above', () => {
+    const tower = [
+      storey(0, 600, [{ x: 200, y: 520 }]),
+      storey(1, 400, [{ x: 210, y: 500 }]),
+    ];
+
+    expect([...stackedStoreys(tower)]).toEqual(['level-0']);
+  });
+
+  it('never folds the top storey or a storey without marks', () => {
+    const tower = [storey(0, 600, []), storey(1, 565)];
+
+    expect([...stackedStoreys(tower)]).toEqual([]);
+  });
+
+  it('leaves storeys that stand apart with marks that never meet', () => {
+    const house = [storey(-1, 600), storey(0, 400), storey(1, 200)];
+
+    expect([...stackedStoreys(house)]).toEqual([]);
+  });
+
+  it('puts each folded storey beside its own floor, swapping sides when the one below took the near side', () => {
+    const tower = [
+      storey(0, 600),
+      storey(1, 565),
+      storey(2, 530),
+      storey(3, 495),
+    ];
+    const spots = storeySpots(
+      tower,
+      new Set(['level-0', 'level-1', 'level-2']),
+      BUBBLE,
+      [],
+      { width: 1000, height: 1000 },
+    );
+    const right = 230 + BUBBLE.width / 2 + 4;
+    const left = 170 - BUBBLE.width / 2 - 4;
+
+    expect([...spots]).toEqual([
+      ['level-0', { x: right, y: 622.5 }],
+      ['level-1', { x: left, y: 587.5 }],
+      ['level-2', { x: right, y: 552.5 }],
+    ]);
+  });
+
+  it('gives no spot to a folded storey with no room left on either side', () => {
+    const tower = [storey(0, 600), storey(1, 590), storey(2, 580)];
+    const spots = storeySpots(
+      tower,
+      new Set(['level-0', 'level-1', 'level-2']),
+      BUBBLE,
+      [],
+      { width: 1000, height: 1000 },
+    );
+
+    expect([...spots.keys()]).toEqual(['level-0', 'level-1']);
+  });
+
+  it('keeps a folded storey off the card controls and inside the card', () => {
+    const spots = storeySpots(
+      [storey(0, 600), storey(1, 565)],
+      new Set(['level-0']),
+      BUBBLE,
+      [{ x: 290, y: 622, width: 40, height: 40 }],
+      { width: 1000, height: 1000 },
+    );
+
+    expect(spots.get('level-0')?.x).toBe(170 - BUBBLE.width / 2 - 4);
+    expect(
+      storeySpots(
+        [storey(0, 600), storey(1, 565)],
+        new Set(['level-0']),
+        BUBBLE,
+        [],
+        { width: 250, height: 1000 },
+      ).get('level-0')?.x,
+    ).toBe(170 - BUBBLE.width / 2 - 4);
   });
 });

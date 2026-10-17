@@ -267,6 +267,7 @@ export type BubbleView = {
   label: string;
   under: boolean;
   selected: boolean;
+  opens: 'chooser' | 'floor';
   onOpen: (event: MouseEvent) => void;
 };
 
@@ -323,8 +324,8 @@ export function bubbleTemplate(view: BubbleView): TemplateResult {
     style="left:${view.at.x}px;top:${view.at.y}px"
     aria-label=${view.label}
     title=${view.label}
-    aria-haspopup="dialog"
-    aria-expanded=${String(view.selected)}
+    aria-haspopup=${view.opens === 'chooser' ? 'dialog' : nothing}
+    aria-expanded=${view.opens === 'chooser' ? String(view.selected) : nothing}
     @click=${view.onOpen}
   >
     <span class="disc"

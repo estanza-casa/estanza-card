@@ -40,6 +40,13 @@ export type MarkSpots = {
 
 export type HitTarget = { key: string; shown: Box; hit: Box; fixed: boolean };
 
+export type StoreyMarks = {
+  id: string;
+  level: number;
+  bounds: Box | null;
+  marks: readonly MarkBox[];
+};
+
 type Placed = LaidMark &
   LabelSize & { fixed: boolean; still: boolean; room: string | null };
 
@@ -48,6 +55,65 @@ const SHIFT_STEP_PX = 8;
 const SHIFT_REACH_PX = 48;
 const SHIFT_TURNS = 16;
 const LEADER_CLEAR_PX = 16;
+const STOREY_GAP_PX = 4;
+
+export function stackedStoreys(storeys: readonly StoreyMarks[]): Set<string> {
+  const drawn = storeys
+    .flatMap((storey) =>
+      storey.bounds ? [{ ...storey, bounds: storey.bounds }] : [],
+    )
+    .sort((a, b) => a.level - b.level);
+
+  return new Set(
+    drawn.flatMap((storey, index) => {
+      const above = drawn[index + 1];
+
+      if (!above || storey.marks.length === 0) return [];
+
+      const step = Math.abs(middle(storey.bounds) - middle(above.bounds));
+      const crowded =
+        step < TOUCH_PX ||
+        storey.marks.some((mark) => covered(mark, above.marks));
+
+      return crowded ? [storey.id] : [];
+    }),
+  );
+}
+
+export function storeySpots(
+  storeys: readonly StoreyMarks[],
+  stacked: ReadonlySet<string>,
+  size: LabelSize,
+  blocked: readonly MarkBox[],
+  area: LayoutArea | null,
+): Map<string, Point> {
+  const spots = new Map<string, Point>();
+  const ordered = [...storeys].sort((a, b) => a.level - b.level);
+
+  for (const { id, bounds } of ordered) {
+    if (!stacked.has(id) || !bounds) continue;
+
+    const y = middle(bounds);
+    const reach = size.width / 2 + STOREY_GAP_PX;
+    const spot = [
+      { x: bounds.right + reach, y },
+      { x: bounds.left - reach, y },
+    ].find(
+      (at) =>
+        whole(at, size, area) &&
+        !covered({ ...at, ...size }, blocked) &&
+        [...spots.values()].every((other) => apart(at, other, TOUCH_PX)),
+    );
+
+    if (spot) spots.set(id, spot);
+  }
+
+  return spots;
+}
+
+function middle(box: Box): number {
+  return (box.top + box.bottom) / 2;
+}
 
 export function layoutMarks(
   requests: readonly MarkRequest[],

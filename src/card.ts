@@ -243,11 +243,15 @@ import {
 } from './living.js';
 import {
   type HitTarget,
+  type LayoutArea,
   layoutMarks,
   type MarkBubble,
   type MarkRequest,
   type MarkSpots,
   splitHits,
+  stackedStoreys,
+  type StoreyMarks,
+  storeySpots,
   TOUCH_PX,
 } from './mark-layout.js';
 import { namesStyles, numberRepeats, openingRowName } from './names.js';
@@ -359,7 +363,13 @@ type ShownMark = {
 
 type LaidMark = ShownMark & { anchor: Point };
 
-type LaidBubble = MarkBubble & { host: ShownMark | null };
+type LaidBubble = MarkBubble & { host: ShownMark | null; floor?: string };
+
+type StackedMarks = {
+  bubbles: LaidBubble[];
+  folded: Set<string>;
+  hidden: string[];
+};
 
 type LaidMarks = { marks: LaidMark[]; bubbles: LaidBubble[]; hidden: string[] };
 
@@ -868,6 +878,7 @@ export class EstanzaCard extends LitElement {
   private shownMove: Drift = { x: 0, y: 0 };
   private glideFrame: number | null = null;
   private groupedFloors = new Set<string>();
+  private pickerBox: Box | null = null;
   private groupedSpans = new Map<string, { span: number; scene: string }>();
   private groupedAnchors: ReadonlyMap<string, Point> | null = null;
   private groupedPick: string | null = null;
@@ -1835,6 +1846,7 @@ export class EstanzaCard extends LitElement {
     this.measureSheet();
     this.frameForSheet();
     this.measureControls();
+    this.measurePicker();
     this.shareMarkSpots();
     this.moveFocus();
     this.flattenOnce();
@@ -2101,6 +2113,16 @@ export class EstanzaCard extends LitElement {
       plan.clear = this.planClear;
       plan.reserve = this.planReserve;
     }
+  }
+
+  private measurePicker(): void {
+    const open = this.chipFloors && this.floorsOpen;
+    const boxes = open ? this.measure('.dock .floors') : [];
+
+    if (sameClear(boxes, this.pickerBox ? [this.pickerBox] : [])) return;
+
+    this.pickerBox = boxes[0] ?? null;
+    this.requestUpdate();
   }
 
   private get pinRoom(): number {
@@ -2982,11 +3004,19 @@ export class EstanzaCard extends LitElement {
     labels: TemperatureLabel[],
   ): (TemplateResult | typeof nothing)[] {
     const sheets = this.sheetBoxes();
+    const picker = this.pickerBox ? [this.pickerBox] : [];
+    const covers = [...sheets, ...picker];
+    const picked = new Set(
+      laid.marks
+        .filter(({ anchor }) => underSheet(anchor, DOT_BOX, picker))
+        .map(({ key }) => key),
+    );
     const stairWords = (
       this.view === '2d' ? (this.planView?.wordBoxes() ?? []) : []
     ).filter((word) => word.key.startsWith('stair:'));
     const leaders = laid.marks
       .filter(({ at, anchor }) => at.x !== anchor.x || at.y !== anchor.y)
+      .filter(({ key }) => !picked.has(key))
       .map((mark) => offWords(mark, stairWords));
 
     const marks = laid.marks.map((shown): Focusable => {
@@ -3001,7 +3031,7 @@ export class EstanzaCard extends LitElement {
         template: markTemplate({
           control,
           at: mark?.phase === 'armed' ? this.insideStage(at, ARMED_BOX) : at,
-          under: underSheet(at, size, sheets),
+          under: picked.has(key) || underSheet(at, size, covers),
           phase: mark?.phase ?? null,
           selected: this.sheet?.key === key,
           lamp: this.lampOf(key),
@@ -3022,6 +3052,9 @@ export class EstanzaCard extends LitElement {
         return control ? [control] : [];
       });
       const at = { x: bubble.x, y: bubble.y };
+      const floor = bubble.floor;
+      const storey = this.storeys.find(({ id }) => id === floor);
+      const count = this.countWords(bubble.members);
 
       return {
         key: `bubble:${bubble.key}`,
@@ -3032,23 +3065,35 @@ export class EstanzaCard extends LitElement {
           at,
           icon: this.dominantIcon(members),
           count: bubble.members.length,
-          label: this.countWords(bubble.members),
-          under: underSheet(at, GLYPH_BOX, sheets),
+          label: storey ? `${storey.name}, ${count}` : count,
+          under: underSheet(at, GLYPH_BOX, covers),
           selected: this.chooser?.key === bubble.key,
+          opens: floor ? 'floor' : 'chooser',
           onOpen: (event: MouseEvent) => {
             if (event.detail > 0 && this.pressedBubble !== bubble.key) return;
 
-            this.openChooser(bubble);
+            if (floor) this.chooseFloor(floor);
+            else this.openChooser(bubble);
           },
         }),
       };
     });
-    const pills = labels.map((label): Focusable => ({
-      key: `pill:${label.key}`,
-      at: { x: label.x, y: label.y },
-      room: label.key,
-      template: pillTemplate(label, this.onPill),
-    }));
+    const pills = labels.flatMap((label): Focusable[] => {
+      const size = label.large
+        ? pillSize(label.text, 'large')
+        : this.pillSize(label, label.small);
+
+      if (underSheet(label, size, picker)) return [];
+
+      return [
+        {
+          key: `pill:${label.key}`,
+          at: { x: label.x, y: label.y },
+          room: label.key,
+          template: pillTemplate(label, this.onPill),
+        },
+      ];
+    });
     const read = inReadingOrder(pills, [...marks, ...bubbles]);
 
     return [
@@ -3093,25 +3138,34 @@ export class EstanzaCard extends LitElement {
               outlines.some((outline) => insidePolygon(at, outline)),
           }
         : null;
-    const requests = placed.map((shown): MarkRequest => {
+    const blocked = [...this.pinBoxes(), ...this.controlBoxes()];
+    const stacked = this.stackedMarks(placed, blocked, area);
+    const requests = placed.flatMap((shown): MarkRequest[] => {
+      if (stacked.folded.has(shown.key)) return [];
+
       const dot = this.isDot(shown);
       const fixed = this.isFixed(shown.key);
 
-      return {
-        key: shown.key,
-        ...(fixed ? this.drawnSpot(shown.key, shown.at) : shown.at),
-        ...(dot ? DOT_BOX : GLYPH_BOX),
-        rank: dot ? 0 : 1,
-        fixed,
-        still: dot,
-        passive: this.isPassive(shown.key),
-        room: this.roomOfMark(shown.control.scope),
-        avoid: dot ? words : stairWords,
-      };
+      return [
+        {
+          key: shown.key,
+          ...(fixed ? this.drawnSpot(shown.key, shown.at) : shown.at),
+          ...(dot ? DOT_BOX : GLYPH_BOX),
+          rank: dot ? 0 : 1,
+          fixed,
+          still: dot,
+          passive: this.isPassive(shown.key),
+          room: this.roomOfMark(shown.control.scope),
+          avoid: dot ? words : stairWords,
+        },
+      ];
     });
     const layout = layoutMarks(
       requests,
-      [...this.pinBoxes(), ...this.controlBoxes()],
+      [
+        ...blocked,
+        ...stacked.bubbles.map((bubble) => ({ ...bubble, ...BUBBLE_CLEAR })),
+      ],
       area,
     );
     const byKey = new Map(placed.map((shown) => [shown.key, shown]));
@@ -3124,11 +3178,85 @@ export class EstanzaCard extends LitElement {
           ? [{ ...shown, at: { x: laid.x, y: laid.y }, anchor: shown.at }]
           : [];
       }),
-      bubbles: layout.bubbles.map((bubble) => ({
-        ...bubble,
-        host: byKey.get(bubble.members[0]) ?? null,
-      })),
-      hidden: [...tucked, ...layout.hidden],
+      bubbles: [
+        ...stacked.bubbles,
+        ...layout.bubbles.map((bubble) => ({
+          ...bubble,
+          host: byKey.get(bubble.members[0]) ?? null,
+        })),
+      ],
+      hidden: [...tucked, ...layout.hidden, ...stacked.hidden],
+    };
+  }
+
+  private stackedMarks(
+    placed: readonly ShownMark[],
+    blocked: readonly MarkBox[],
+    area: LayoutArea | null,
+  ): StackedMarks {
+    const none: StackedMarks = { bubbles: [], folded: new Set(), hidden: [] };
+
+    if (this.view !== '3d' || this.viewedFloor !== null) return none;
+
+    const loose = placed.filter(({ key }) => !this.isFixed(key));
+    const storeys = (this.homeFloors?.floors ?? []).map(
+      (floor): StoreyMarks & { keys: string[] } => {
+        const marks = loose.filter(
+          ({ control }) => this.floorOf(control.scope) === floor.id,
+        );
+        const prints = this.surface?.roomFootprints([
+          ...floor.roomsBySlug.keys(),
+        ]);
+
+        return {
+          id: floor.id,
+          level: floor.level,
+          bounds: boxOf(
+            [...(prints?.values() ?? [])].flatMap((print) => [
+              ...print.floor,
+              ...print.top,
+            ]),
+          ),
+          marks: marks.map((shown) => ({
+            ...shown.at,
+            ...(this.isDot(shown) ? DOT_BOX : GLYPH_BOX),
+          })),
+          keys: marks.map(({ key }) => key),
+        };
+      },
+    );
+    const stacked = stackedStoreys(storeys);
+
+    if (stacked.size === 0) return none;
+
+    const spots = storeySpots(
+      storeys,
+      stacked,
+      BUBBLE_CLEAR,
+      blocked,
+      area && { width: area.width, height: area.height },
+    );
+    const folded = storeys.filter(({ id }) => stacked.has(id));
+
+    return {
+      bubbles: folded.flatMap(({ id, keys }): LaidBubble[] => {
+        const spot = spots.get(id);
+
+        return spot
+          ? [
+              {
+                key: `floor:${id}`,
+                ...spot,
+                members: keys,
+                room: null,
+                host: null,
+                floor: id,
+              },
+            ]
+          : [];
+      }),
+      folded: new Set(folded.flatMap(({ keys }) => keys)),
+      hidden: folded.flatMap(({ id, keys }) => (spots.has(id) ? [] : keys)),
     };
   }
 
